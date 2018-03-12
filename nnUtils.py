@@ -23,10 +23,10 @@ def binarize(x):
             return tf.sign(x)
 
 def BinarizedSpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
-        padding='VALID', bias=True, reuse=None, name='BinarizedSpatialConvolution'):
-    def b_conv2d(x, is_training=True):
+        padding='VALID', bias=True, name='BinarizedSpatialConvolution'):
+    def b_conv2d(x, is_training=True, reuse=None):
         nInputPlane = x.get_shape().as_list()[3]
-        with tf.variable_scope(None, name, [x], reuse=reuse):
+        with tf.variable_scope(name, values=[x], reuse=reuse):
             w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
                             initializer=tf.contrib.layers.xavier_initializer_conv2d())
             bin_w = binarize(w)
@@ -43,13 +43,13 @@ def BinarizedSpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
     return b_conv2d
 
 def BinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
-        padding='VALID', bias=True, reuse=None, name='BinarizedWeightOnlySpatialConvolution'):
+        padding='VALID', bias=True, name='BinarizedWeightOnlySpatialConvolution'):
     '''
     This function is used only at the first layer of the model as we dont want to binarized the RGB images
     '''
-    def bc_conv2d(x, is_training=True):
+    def bc_conv2d(x, is_training=True, reuse=None):
         nInputPlane = x.get_shape().as_list()[3]
-        with tf.variable_scope(None, name, [x], reuse=reuse):
+        with tf.variable_scope(name, values=[x], reuse=reuse):
             w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
                             initializer=tf.contrib.layers.xavier_initializer_conv2d())
             bin_w = binarize(w)
@@ -61,10 +61,10 @@ def BinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
     return bc_conv2d
 
 def SpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
-        padding='VALID', bias=True, reuse=None, name='SpatialConvolution'):
-    def conv2d(x, is_training=True):
+        padding='VALID', bias=True, name='SpatialConvolution'):
+    def conv2d(x, is_training=True, reuse=None):
         nInputPlane = x.get_shape().as_list()[3]
-        with tf.variable_scope(None, name, [x], reuse=reuse):
+        with tf.variable_scope(name, values=[x], reuse=reuse):
             w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
                             initializer=tf.contrib.layers.xavier_initializer_conv2d(),
                             regularizer=regularizer)
@@ -75,9 +75,9 @@ def SpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
             return out
     return conv2d
 
-def Affine(nOutputPlane, bias=True, name=None, reuse=None):
-    def affineLayer(x, is_training=True):
-        with tf.variable_scope(name, 'Affine', [x], reuse=reuse):
+def Affine(nOutputPlane, bias=True, name=None):
+    def affineLayer(x, is_training=True, reuse=None):
+        with tf.variable_scope(name, 'Affine', values=[x], reuse=reuse):
             reshaped = tf.reshape(x, [x.get_shape().as_list()[0], -1])
             nInputPlane = reshaped.get_shape().as_list()[1]
             w = tf.get_variable('weight', [nInputPlane, nOutputPlane],
@@ -90,9 +90,9 @@ def Affine(nOutputPlane, bias=True, name=None, reuse=None):
         return output
     return affineLayer
 
-def BinarizedAffine(nOutputPlane, bias=True, name=None, reuse=None):
-    def b_affineLayer(x, is_training=True):
-        with tf.variable_scope(name, 'Affine', [x], reuse=reuse):
+def BinarizedAffine(nOutputPlane, bias=True, name=None):
+    def b_affineLayer(x, is_training=True, reuse=None):
+        with tf.variable_scope(name, 'Affine', values=[x], reuse=reuse):
             '''
             Note that we use binarized version of the input (bin_x) and the weights (bin_w). Since the binarized function uses STE
             we calculate the gradients using bin_x and bin_w but we update w (the full precition version).
@@ -109,9 +109,9 @@ def BinarizedAffine(nOutputPlane, bias=True, name=None, reuse=None):
         return output
     return b_affineLayer
 
-def BinarizedWeightOnlyAffine(nOutputPlane, bias=True, name=None, reuse=None):
-    def bwo_affineLayer(x, is_training=True):
-        with tf.variable_scope(name, 'Affine', [x], reuse=reuse):
+def BinarizedWeightOnlyAffine(nOutputPlane, bias=True, name=None):
+    def bwo_affineLayer(x, is_training=True, reuse=None):
+        with tf.variable_scope(name, 'Affine', values=[x], reuse=reuse):
             '''
             Note that we use binarized version of the input (bin_x) and the weights (bin_w). Since the binarized function uses STE
             we calculate the gradients using bin_x and bin_w but we update w (the full precition version).
@@ -132,13 +132,13 @@ def Linear(nInputPlane, nOutputPlane):
 
 
 def wrapNN(f,*args,**kwargs):
-    def layer(x, scope='', is_training=True):
+    def layer(x, scope='', is_training=True, reuse=None):
         return f(x,*args,**kwargs)
     return layer
 
 def Dropout(p, name='Dropout'):
-    def dropout_layer(x, is_training=True):
-        with tf.variable_scope(None, name, [x]):
+    def dropout_layer(x, is_training=True, reuse=None):
+        with tf.variable_scope(name, values=[x], reuse=reuse):
             # def drop(): return tf.nn.dropout(x,p)
             # def no_drop(): return x
             # return tf.cond(is_training, drop, no_drop)
@@ -149,20 +149,20 @@ def Dropout(p, name='Dropout'):
     return dropout_layer
 
 def ReLU(name='ReLU'):
-    def layer(x, is_training=True):
-        with tf.variable_scope(None, name, [x]):
+    def layer(x, is_training=True, reuse=None):
+        with tf.variable_scope(name, values=[x], reuse=reuse):
             return tf.nn.relu(x)
     return layer
 
 def HardTanh(name='HardTanh'):
-    def layer(x, is_training=True):
-        with tf.variable_scope(None, name, [x]):
+    def layer(x, is_training=True, reuse=None):
+        with tf.variable_scope(name, values=[x], reuse=reuse):
             return tf.clip_by_value(x,-1,1)
     return layer
 
 
-def View(shape, name='View'):
-    with tf.variable_scope(None, name, [x], reuse=reuse):
+def View(shape, name='View', reuse=None):
+    with tf.variable_scope(name, values=[x], reuse=reuse):
         return wrapNN(tf.reshape,shape=shape)
 
 def SpatialMaxPooling(kW, kH=None, dW=None, dH=None, padding='VALID',
@@ -170,8 +170,8 @@ def SpatialMaxPooling(kW, kH=None, dW=None, dH=None, padding='VALID',
     kH = kH or kW
     dW = dW or kW
     dH = dH or kH
-    def max_pool(x,is_training=True):
-        with tf.variable_scope(None, name, [x]):
+    def max_pool(x,is_training=True, reuse=None):
+        with tf.variable_scope(name, values=[x], reuse=reuse):
               return tf.nn.max_pool(x, ksize=[1, kW, kH, 1], strides=[1, dW, dH, 1], padding=padding)
     return max_pool
 
@@ -180,40 +180,40 @@ def SpatialAveragePooling(kW, kH=None, dW=None, dH=None, padding='VALID',
     kH = kH or kW
     dW = dW or kW
     dH = dH or kH
-    def avg_pool(x,is_training=True):
-        with tf.variable_scope(None, name, [x]):
+    def avg_pool(x,is_training=True, reuse=None):
+        with tf.variable_scope(name, values=[x], reuse=reuse):
               return tf.nn.avg_pool(x, ksize=[1, kW, kH, 1], strides=[1, dW, dH, 1], padding=padding)
     return avg_pool
-
+    
 def BatchNormalization(*kargs, **kwargs):
     return wrapNN(tf.contrib.layers.batch_norm, *kargs, **kwargs)
 
 def LocalResposeNormalize(radius, alpha, beta, bias=1.0, name='LocalResposeNormalize'):
-    def layer(x,is_training=True):
-        with tf.variable_scope(None, name, [x]):
+    def layer(x,is_training=True, reuse=None):
+        with tf.variable_scope(name, values=[x], reuse=reuse):
             return tf.nn.local_response_normalization(x, depth_radius = radius,
                                                       alpha = alpha, beta = beta,
                                                       bias = bias, name = name)
     return layer
 
 def Sequential(moduleList):
-    def model(x, is_training=True):
+    def model(x, is_training=True, reuse=None):
     # Create model
         output = x
         #with tf.variable_op_scope([x], None, name):
         for i,m in enumerate(moduleList):
-            output = m(output, is_training=is_training)
+            output = m(output, is_training=is_training, reuse=reuse)
             tf.add_to_collection(tf.GraphKeys.ACTIVATIONS, output)
         return output
     return model
 
 def Concat(moduleList, dim=3):
-    def model(x, is_training=True):
+    def model(x, is_training=True, reuse=None):
     # Create model
         outputs = []
         for i,m in enumerate(moduleList):
             name = 'layer_'+str(i)
-            with tf.variable_scope(name, 'Layer', [x],  reuse=reuse):
+            with tf.variable_scope(name, 'Layer', values=[x],  reuse=reuse):
                 outputs[i] = m(x, is_training=is_training)
             output = tf.concat(dim, outputs)
         return output
@@ -221,9 +221,9 @@ def Concat(moduleList, dim=3):
 
 def Residual(moduleList, name='Residual'):
     m = Sequential(moduleList)
-    def model(x, is_training=True):
+    def model(x, is_training=True, reuse=None):
     # Create model
-        with tf.variable_scope(None, name, [x]):
+        with tf.variable_scope(name, values=[x]):
             output = tf.add(m(x, is_training=is_training), x)
             return output
     return model
