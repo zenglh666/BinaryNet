@@ -19,7 +19,7 @@ tf.app.flags.DEFINE_integer('batch_size', 128,
                             """Number of images to process in a batch.""")
 tf.app.flags.DEFINE_integer('num_epochs', 25,
                             """Number of epochs to train. -1 for unlimited""")
-tf.app.flags.DEFINE_integer('initial_learning_rate', 0.1,
+tf.app.flags.DEFINE_float('initial_learning_rate', 0.1,
                             """Initial learning rate used.""")
 tf.app.flags.DEFINE_float('learning_rate_decay_factor', 0.1,
                           """Learning rate decay factor.""")
