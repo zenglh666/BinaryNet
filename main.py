@@ -340,9 +340,9 @@ if __name__ == '__main__':
     if not gfile.Exists(FLAGS.checkpoint_dir):
         gfile.MakeDirs(FLAGS.checkpoint_dir)
         logger.warning('create direction: ' + FLAGS.checkpoint_dir)
-        model_file = os.path.join('./models', FLAGS.model + '.py')
-        assert gfile.Exists(model_file), 'no model file named: ' + model_file
-        gfile.Copy(model_file, FLAGS.checkpoint_dir + '/model.py')
+    model_file = os.path.join('./models', FLAGS.model + '.py')
+    assert gfile.Exists(model_file), 'no model file named: ' + model_file
+    gfile.Copy(model_file, FLAGS.checkpoint_dir + '/model.py', overwrite=True)
     if not gfile.Exists(FLAGS.log_dir):
         gfile.MakeDirs(FLAGS.log_dir)
         logger.warning('create direction: ' + FLAGS.log_dir)
