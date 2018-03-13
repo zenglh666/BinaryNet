@@ -219,11 +219,14 @@ def Concat(moduleList, dim=3):
         return output
     return model
 
-def Residual(moduleList, name='Residual'):
+def Residual(moduleList, connect=True, name='Residual'):
     m = Sequential(moduleList)
     def model(x, is_training=True, reuse=None):
     # Create model
-        with tf.variable_scope(name, values=[x]):
-            output = tf.add(m(x, is_training=is_training), x)
+        with tf.variable_scope(name, values=[x], reuse=reuse):
+            if connect:
+                output = tf.add(m(x, is_training=is_training, reuse=reuse), x)
+            else:
+                output = m(x, is_training=is_training, reuse=reuse)
             return output
     return model
