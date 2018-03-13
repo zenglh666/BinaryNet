@@ -11,7 +11,7 @@ import nnUtils
 import sys
 import logging
 
-timestr = '-'.join(str(x) for x in list(tuple(datetime.now().timetuple())[:6]))
+timestr =  datetime.now().isoformat().replace(':','-').replace('.','MS')
 MOVING_AVERAGE_DECAY = 0.997
 FLAGS = tf.app.flags.FLAGS
 
@@ -320,7 +320,8 @@ def train(model, dataset, optimizer,
 
 
 def main(argv=None):  # pylint: disable=unused-argument
-
+    for key, value in FLAGS.__flags.items():
+        logger.info('%s: %s' % (key, value))
     m = importlib.import_module('results.' + FLAGS.save + '.model')
     train(m.model, FLAGS.dataset, FLAGS.optimizer,
           batch_size=FLAGS.batch_size,
