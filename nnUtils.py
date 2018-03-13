@@ -4,12 +4,12 @@ from tensorflow.python.training import moving_averages
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.framework import ops
 
+tf.app.flags.DEFINE_string('regularizer', 'None',
+                           """regularizer for weights:L1(L1),L2(L2)""")
+tf.app.flags.DEFINE_float('regularizer_norm', 0.0001,
+                          """regularizer norm.""")
 FLAGS = tf.app.flags.FLAGS
 regularizer = None
-if FLAGS.regularizer=='L1':
-    regularizer=tf.contrib.layers.l1_regularizer(0.0005)
-elif FLAGS.regularizer=='L2':
-    regularizer=tf.contrib.layers.l2_regularizer(0.0005)
     
 def binarize(x):
     """
@@ -197,6 +197,12 @@ def LocalResposeNormalize(radius, alpha, beta, bias=1.0, name='LocalResposeNorma
     return layer
 
 def Sequential(moduleList):
+    global regularizer
+    if regularizer == None:
+        if FLAGS.regularizer == 'L1':
+            regularizer = tf.contrib.layers.l1_regularizer(FLAGS.regularizer_norm)
+        elif FLAGS.regularizer == 'L2':
+            regularizer = tf.contrib.layers.l2_regularizer(FLAGS.regularizer_norm)
     def model(x, is_training=True, reuse=None):
     # Create model
         output = x

@@ -7,6 +7,7 @@ from datetime import datetime
 from tensorflow.python.platform import gfile
 from data import *
 from evaluate import evaluate
+import nnUtils
 import sys
 import logging
 
@@ -42,8 +43,6 @@ tf.app.flags.DEFINE_string('log_file', timestr+'.log',
 tf.app.flags.DEFINE_string('optimizer', 'SGD',
                            """optimizer for algorithms:MomentumOptimizer(MOM),
                            GradientDescentOptimizer(SGD), AdamOptimizer(ADA)""")
-tf.app.flags.DEFINE_string('regularizer', 'None',
-                           """regularizer for weights:L1(L1),L2(L2)""")
 tf.app.flags.DEFINE_integer('num_gpu', 1,
                                """number of gpus to use.If 0 then cpu""")
 tf.app.flags.DEFINE_boolean('debug', False,
