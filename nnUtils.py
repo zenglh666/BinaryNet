@@ -185,8 +185,11 @@ def SpatialAveragePooling(kW, kH=None, dW=None, dH=None, padding='VALID',
               return tf.nn.avg_pool(x, ksize=[1, kW, kH, 1], strides=[1, dW, dH, 1], padding=padding)
     return avg_pool
     
-def BatchNormalization(*kargs, **kwargs):
-    return wrapNN(tf.contrib.layers.batch_norm, *kargs, **kwargs)
+def BatchNormalization(name='BatchNormalization'):
+    def batch_norm(x, is_training=True, reuse=None):
+        with tf.variable_scope(name, values=[x], reuse=reuse):
+            return tf.contrib.layers.batch_norm(x, is_training=is_training, reuse=reuse)
+    return batch_norm
 
 def LocalResposeNormalize(radius, alpha, beta, bias=1.0, name='LocalResposeNormalize'):
     def layer(x,is_training=True, reuse=None):
