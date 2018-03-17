@@ -22,6 +22,8 @@ tf.app.flags.DEFINE_integer('resize_size', 256,
                             """Provide square images of this size.""")
 tf.app.flags.DEFINE_integer('crop_size', 224,
                             """Provide square images of this size.""")
+tf.app.flags.DEFINE_boolean('distort_color',True,
+                            '''If we distort color''')
 FLAGS = tf.app.flags.FLAGS
 
 def __read_cifar(filenames, cifar100=False, shuffle=True):
@@ -231,8 +233,9 @@ def preprocess_training(img, height=None, width=None, normalize=None):
 
     # Because these operations are not commutative, consider randomizing
     # the order their operation.
-    distorted_image = tf.image.random_brightness(distorted_image,max_delta=32. / 255.)
-    distorted_image = tf.image.random_contrast(distorted_image,lower=0.5, upper=1.5)
+    if FLAGS.distort_color:
+      distorted_image = tf.image.random_brightness(distorted_image,max_delta=32. / 255.)
+      distorted_image = tf.image.random_contrast(distorted_image,lower=0.5, upper=1.5)
 
     distorted_image = tf.subtract(distorted_image, 0.5)
     distorted_image = tf.multiply(distorted_image, 2.0)
