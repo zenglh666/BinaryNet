@@ -8,6 +8,8 @@ tf.app.flags.DEFINE_string('regularizer', 'None',
                            """regularizer for weights:L1(L1),L2(L2)""")
 tf.app.flags.DEFINE_float('regularizer_norm', 0.0001,
                           """regularizer norm.""")
+tf.app.flags.DEFINE_boolean('weight_norm', False,
+                           """if norm weight.""")
 FLAGS = tf.app.flags.FLAGS
 regularizer = None
     
@@ -28,7 +30,15 @@ def BinarizedSpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
         nInputPlane = x.get_shape().as_list()[3]
         with tf.variable_scope(name, values=[x], reuse=reuse):
             w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
-                            initializer=tf.contrib.layers.xavier_initializer_conv2d())
+                            initializer=tf.contrib.layers.xavier_initializer_conv2d(uniform=False))
+
+            if FLAGS.weight_norm and (not reuse) :
+                mean = tf.reduce_mean(w)
+                variance = tf.sqrt(tf.reduce_mean(tf.square(w - mean)))
+                std = tf.sqrt(2. / tf.cast(nInputPlane + nOutputPlane, tf.float32))
+                w_norm = tf.multiply(tf.div(tf.subtract(w, mean), variance), std)
+                tf.add_to_collection(tf.GraphKeys.UPDATE_OPS, tf.assign(w, w_norm))
+
             bin_w = binarize(w)
             bin_x = binarize(x)
             '''
@@ -53,7 +63,7 @@ def BinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
             w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
                             initializer=tf.contrib.layers.xavier_initializer_conv2d())
             bin_w = binarize(w)
-            out = tf.nn.conv2d(x, bin_w, strides=[1, dH, dW, 1], padding=padding)
+            out = tf.nn.conv2d(tf.clip_by_value(x,-1,1), bin_w, strides=[1, dH, dW, 1], padding=padding)
             if bias:
                 b = tf.get_variable('bias', [nOutputPlane],initializer=tf.zeros_initializer)
                 out = tf.nn.bias_add(out, b)

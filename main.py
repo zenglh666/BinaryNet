@@ -48,7 +48,7 @@ tf.app.flags.DEFINE_integer('num_gpu', 1,
 tf.app.flags.DEFINE_boolean('debug', False,
                            """if debug.""")
 
-FLAGS.checkpoint_dir = './results/' + FLAGS.save
+FLAGS.checkpoint_dir = './results/' + FLAGS.model + '_' + FLAGS.save
 FLAGS.log_dir = FLAGS.checkpoint_dir + '/log/'
 logger = logging.getLogger(__name__)
 formatter = logging.Formatter('''%(asctime)s - %(name)s'''
@@ -302,7 +302,7 @@ def train(model, dataset, optimizer,
         logger.info('Training Loss: %.3f' % loss_value)
 
         test_acc1, test_acc5, test_loss = evaluate(model, dataset,
-                                                   batch_size=batch_size,
+                                                   batch_size=batch_size//2,
                                                    if_debug=if_debug,
                                                    checkpoint_dir=checkpoint_dir)  # ,
         # log_dir=log_dir)
@@ -322,7 +322,7 @@ def train(model, dataset, optimizer,
 def main(argv=None):  # pylint: disable=unused-argument
     for key, value in FLAGS.__flags.items():
         logger.info('%s: %s' % (key, value))
-    m = importlib.import_module('results.' + FLAGS.save + '.model')
+    m = importlib.import_module('models.' + FLAGS.model)
     train(m.model, FLAGS.dataset, FLAGS.optimizer,
           batch_size=FLAGS.batch_size,
           num_epochs=FLAGS.num_epochs,
