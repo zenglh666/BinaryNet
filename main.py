@@ -282,6 +282,15 @@ def train(model, dataset, optimizer,
 
     logger.info('num of trainable paramaters: %d' %
           __count_params(tf.trainable_variables()))
+
+    logger.info('Start pre-training...')
+    avg_variance = tf.get_collection('avg_variance')
+    for curr_step in range(10000):
+      loss_val = sess.run(loss)
+      if curr_step % 100 == 0:
+        logger.info('Cunrrent step: %d, Loss: %.3f' % (curr_step, loss_val))
+    logger.info('End pre-training...')
+
     while epoch != num_epochs:
         epoch += 1
         curr_count = 0
