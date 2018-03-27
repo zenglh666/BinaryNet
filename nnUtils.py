@@ -8,6 +8,8 @@ tf.app.flags.DEFINE_string('regularizer', 'None',
                            """regularizer for weights:L1(L1),L2(L2)""")
 tf.app.flags.DEFINE_float('regularizer_norm', 0.0001,
                           """regularizer norm.""")
+tf.app.flags.DEFINE_float('weight_norm_factor', 0.0001,
+                          """regularizer norm.""")
 tf.app.flags.DEFINE_boolean('weight_norm', False,
                            """if norm weight.""")
 FLAGS = tf.app.flags.FLAGS
@@ -79,6 +81,8 @@ def SpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
                             initializer=tf.variance_scaling_initializer(mode='fan_avg'),
                             regularizer=regularizer)
             if FLAGS.weight_norm:
+                w_mean = tf.get_variable('w_mean', [1,1,w.shape[2],1],
+                            initializer=tf.constant_initializer(0.), trainable=False)
                 beta = tf.get_variable('beta', [1,1,w.shape[2],1],
                             initializer=tf.constant_initializer(0.), trainable=False)
                 gamma = tf.get_variable('gamma', [1,1,w.shape[2],1],
@@ -86,24 +90,27 @@ def SpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
 
         if FLAGS.weight_norm:
             with tf.variable_scope(name + '/bn', reuse=(not is_training)):
-                _, x_variance = tf.nn.moments(x, axes=[0, 1, 2], keep_dims=True)
+                x_mean, x_variance = tf.nn.moments(x, axes=[0, 1, 2], keep_dims=True)
                 x_variance = tf.transpose(x_variance, perm=[0, 1, 3, 2])
+                x_mean = tf.reduce_mean(x_mean)
 
-                w_mean, w_variance = tf.nn.moments(w, axes=[0, 1, 3], keep_dims=True)
-                w_variance = tf.multiply(x_variance, w_variance)
+                w_sum = tf.reduce_sum(w)
 
-                ema = tf.train.ExponentialMovingAverage(decay=0.999)
+                ema = tf.train.ExponentialMovingAverage(decay=(1-FLAGS.weight_norm_factor))
                 if is_training:
-                    apply_op = ema.apply([w_mean, w_variance])
+                    apply_op = ema.apply([x_mean, x_variance])
                     tf.add_to_collection(tf.GraphKeys.UPDATE_OPS, apply_op)
                     with tf.control_dependencies([apply_op]):
-                        avg_w_mean = ema.average(w_mean)
-                        avg_w_variance = ema.average(w_variance)
-                        w = tf.nn.batch_normalization(w, avg_w_mean, avg_w_variance, beta, gamma, 1e-3)
+                        avg_x_mean = tf.identity(x_mean)
+                        avg_x_variance = tf.identity(x_variance)
+                        w = tf.nn.batch_normalization(w, w_mean, avg_x_variance, beta, gamma, 1e-3)
                 else:
-                    avg_w_mean = ema.average(w_mean)
-                    avg_w_variance = ema.average(w_variance)
-                    w = tf.nn.batch_normalization(w, avg_w_mean, avg_w_variance, beta, gamma, 1e-3)
+                    avg_x_mean = ema.average(w_mean)
+                    avg_x_variance = ema.average(w_variance)
+                    w = tf.nn.batch_normalization(w, w_mean, avg_x_variance, beta, gamma, 1e-3)
+            with tf.variable_scope(name, values=[x], reuse=reuse):
+                out = tf.nn.conv2d(x, w, strides=[1, dH, dW, 1], padding=padding) - tf.multiply(avg_x_mean, w_sum)
+                return out
 
         with tf.variable_scope(name, values=[x], reuse=reuse):
             out = tf.nn.conv2d(x, w, strides=[1, dH, dW, 1], padding=padding)
@@ -122,6 +129,8 @@ def Affine(nOutputPlane, bias=True, name=None):
                                 initializer=tf.variance_scaling_initializer(mode='fan_avg'),
                                 regularizer=regularizer)
             if FLAGS.weight_norm:
+                w_mean = tf.get_variable('w_mean', [w.shape[0],1],
+                            initializer=tf.constant_initializer(0.), trainable=False)
                 beta = tf.get_variable('beta', [w.shape[0],1],
                             initializer=tf.constant_initializer(0.), trainable=False)
                 gamma = tf.get_variable('gamma', [w.shape[0],1],
@@ -129,24 +138,28 @@ def Affine(nOutputPlane, bias=True, name=None):
 
         if FLAGS.weight_norm:
             with tf.variable_scope(name + '/bn', reuse=(not is_training)):
-                _, x_variance = tf.nn.moments(reshaped, axes=[0], keep_dims=True)
+                x_mean, x_variance = tf.nn.moments(reshaped, axes=[0], keep_dims=True)
                 x_variance = tf.transpose(x_variance, perm=[1, 0])
+                x_mean = tf.reduce_mean(x_mean)
 
-                w_mean, w_variance = tf.nn.moments(w, axes=[1], keep_dims=True)
-                w_variance = tf.multiply(x_variance, w_variance)
+                w_sum = tf.reduce_sum(w)
 
-                ema = tf.train.ExponentialMovingAverage(decay=0.999)
+                ema = tf.train.ExponentialMovingAverage(decay=(1-FLAGS.weight_norm_factor))
                 if is_training:
-                    apply_op = ema.apply([w_mean, w_variance])
+                    apply_op = ema.apply([x_mean, x_variance])
                     tf.add_to_collection(tf.GraphKeys.UPDATE_OPS, apply_op)
                     with tf.control_dependencies([apply_op]):
-                        avg_w_mean = ema.average(w_mean)
-                        avg_w_variance = ema.average(w_variance)
-                        w = tf.nn.batch_normalization(w, avg_w_mean, avg_w_variance, beta, gamma, 1e-3)
+                        avg_x_mean = tf.identity(x_mean)
+                        avg_x_variance = tf.identity(x_variance)
+                        w = tf.nn.batch_normalization(w, w_mean, avg_x_variance, beta, gamma, 1e-3)
                 else:
-                    avg_w_mean = ema.average(w_mean)
-                    avg_w_variance = ema.average(w_variance)
-                    w = tf.nn.batch_normalization(w, avg_w_mean, avg_w_variance, beta, gamma, 1e-3)
+                    avg_x_mean = ema.average(w_mean)
+                    avg_x_variance = ema.average(w_variance)
+                    w = tf.nn.batch_normalization(w, w_mean, avg_x_variance, beta, gamma, 1e-3)
+                    
+            with tf.variable_scope(name, values=[x], reuse=reuse):
+                output = tf.matmul(reshaped, w) - tf.multiply(avg_x_mean, w_sum)
+                return output
 
         with tf.variable_scope(name, 'Affine', values=[x], reuse=reuse):
             output = tf.matmul(reshaped, w)
