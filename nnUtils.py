@@ -90,27 +90,19 @@ def SpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
 
         if FLAGS.weight_norm:
             with tf.variable_scope(name + '/bn', reuse=(not is_training)):
-                x_mean, x_variance = tf.nn.moments(x, axes=[0, 1, 2], keep_dims=True)
+                _, x_variance = tf.nn.moments(x, axes=[0, 1, 2], keep_dims=True)
                 x_variance = tf.transpose(x_variance, perm=[0, 1, 3, 2])
-                x_mean = tf.reduce_mean(x_mean)
-
-                w_sum = tf.reduce_sum(w)
 
                 ema = tf.train.ExponentialMovingAverage(decay=(1-FLAGS.weight_norm_factor))
                 if is_training:
-                    apply_op = ema.apply([x_mean, x_variance])
+                    apply_op = ema.apply([x_variance])
                     tf.add_to_collection(tf.GraphKeys.UPDATE_OPS, apply_op)
                     with tf.control_dependencies([apply_op]):
-                        avg_x_mean = tf.identity(x_mean)
                         avg_x_variance = tf.identity(x_variance)
-                        w = tf.nn.batch_normalization(w, w_mean, avg_x_variance, beta, gamma, 1e-3)
                 else:
-                    avg_x_mean = ema.average(w_mean)
-                    avg_x_variance = ema.average(w_variance)
-                    w = tf.nn.batch_normalization(w, w_mean, avg_x_variance, beta, gamma, 1e-3)
-            with tf.variable_scope(name, values=[x], reuse=reuse):
-                out = tf.nn.conv2d(x, w, strides=[1, dH, dW, 1], padding=padding) - tf.multiply(avg_x_mean, w_sum)
-                return out
+                    avg_x_variance = ema.average(x_variance)
+
+                w = tf.nn.batch_normalization(w, w_mean, avg_x_variance, beta, gamma, 1e-3)
 
         with tf.variable_scope(name, values=[x], reuse=reuse):
             out = tf.nn.conv2d(x, w, strides=[1, dH, dW, 1], padding=padding)
@@ -128,40 +120,6 @@ def Affine(nOutputPlane, bias=True, name=None):
             w = tf.get_variable('weight', [nInputPlane, nOutputPlane],
                                 initializer=tf.variance_scaling_initializer(mode='fan_avg'),
                                 regularizer=regularizer)
-            if FLAGS.weight_norm:
-                w_mean = tf.get_variable('w_mean', [w.shape[0],1],
-                            initializer=tf.constant_initializer(0.), trainable=False)
-                beta = tf.get_variable('beta', [w.shape[0],1],
-                            initializer=tf.constant_initializer(0.), trainable=False)
-                gamma = tf.get_variable('gamma', [w.shape[0],1],
-                            initializer=tf.constant_initializer(1.), trainable=False)
-
-        if FLAGS.weight_norm:
-            with tf.variable_scope(name + '/bn', reuse=(not is_training)):
-                x_mean, x_variance = tf.nn.moments(reshaped, axes=[0], keep_dims=True)
-                x_variance = tf.transpose(x_variance, perm=[1, 0])
-                x_mean = tf.reduce_mean(x_mean)
-
-                w_sum = tf.reduce_sum(w)
-
-                ema = tf.train.ExponentialMovingAverage(decay=(1-FLAGS.weight_norm_factor))
-                if is_training:
-                    apply_op = ema.apply([x_mean, x_variance])
-                    tf.add_to_collection(tf.GraphKeys.UPDATE_OPS, apply_op)
-                    with tf.control_dependencies([apply_op]):
-                        avg_x_mean = tf.identity(x_mean)
-                        avg_x_variance = tf.identity(x_variance)
-                        w = tf.nn.batch_normalization(w, w_mean, avg_x_variance, beta, gamma, 1e-3)
-                else:
-                    avg_x_mean = ema.average(w_mean)
-                    avg_x_variance = ema.average(w_variance)
-                    w = tf.nn.batch_normalization(w, w_mean, avg_x_variance, beta, gamma, 1e-3)
-                    
-            with tf.variable_scope(name, values=[x], reuse=reuse):
-                output = tf.matmul(reshaped, w) - tf.multiply(avg_x_mean, w_sum)
-                return output
-
-        with tf.variable_scope(name, 'Affine', values=[x], reuse=reuse):
             output = tf.matmul(reshaped, w)
             if bias:
                 b = tf.get_variable('bias', [nOutputPlane],initializer=tf.zeros_initializer)
