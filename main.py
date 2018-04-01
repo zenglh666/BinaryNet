@@ -229,8 +229,8 @@ def train(model, dataset, optimizer,
                 tf.cast(tf.nn.in_top_k(y, yt_splits[i], 1), tf.float32),
                 name='accuracies')
             tf.add_to_collection('accuracies', accuracy)
-        
-        grads = __average_gradients(tower_grads)
+        with tf.device('/cpu:0'):
+          grads = __average_gradients(tower_grads)
         train_op = opt.apply_gradients(grads, global_step=global_step)
         loss = tf.reduce_mean(tf.get_collection('total_losses'),
             name='total_loss')
