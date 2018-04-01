@@ -283,7 +283,7 @@ def train(model, dataset, optimizer,
     logger.info('num of trainable paramaters: %d' %
           __count_params(tf.trainable_variables()))
 
-    if FLAGS.weight_norm:
+    if FLAGS.weight_norm and False:
         logger.info('Start pre-training...')
         avg_variance = tf.get_collection('avg_variance')
         for curr_step in range(10000):

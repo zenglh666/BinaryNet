@@ -22,7 +22,7 @@ tf.app.flags.DEFINE_integer('resize_size', 256,
                             """Provide square images of this size.""")
 tf.app.flags.DEFINE_integer('crop_size', 224,
                             """Provide square images of this size.""")
-tf.app.flags.DEFINE_boolean('distort_color',True,
+tf.app.flags.DEFINE_boolean('distort_color',False,
                             '''If we distort color''')
 FLAGS = tf.app.flags.FLAGS
 
@@ -165,7 +165,7 @@ class DataProvider:
         self.data = data
         self.training = training
 
-    def generate_batches(self, batch_size, min_queue_examples=1024, num_threads=16):
+    def generate_batches(self, batch_size, min_queue_examples=1024, num_threads=8):
         """Construct a queued batch of images and labels.
 
         Args:
