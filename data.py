@@ -142,18 +142,44 @@ def __parse_example_proto(example_serialized):
   return features['image/encoded'], label, bbox, features['image/class/text']
 
 
-def __read_imagenet(data_files, train=True):
+def __read_imagenet(data_files, train=True, num_readers=32):
     if train:
-      filename_queue = tf.train.string_input_producer(data_files,
-                                                      shuffle=True,
-                                                      capacity=16)
+      filename_queue = tf.train.string_input_producer(data_files, shuffle=True, capacity=16)
     else:
-      filename_queue = tf.train.string_input_producer(data_files,
-                                                      shuffle=False,
-                                                      capacity=1)
-    reader = tf.TFRecordReader()
-    key, value = reader.read(filename_queue)
-    image_buffer, label_index, bbox, class_text = __parse_example_proto(value)
+      filename_queue = tf.train.string_input_producer(data_files, shuffle=False, capacity=1)
+
+    # Approximate number of examples per shard.
+    examples_per_shard = 1024
+    # Size the random shuffle queue to balance between good global
+    # mixing (more examples) and memory use (fewer examples).
+    # 1 image uses 299*299*3*4 bytes = 1MB
+    # The default input_queue_memory_factor is 16 implying a shuffling queue
+    # size: examples_per_shard * 16 * 1MB = 17.6GB
+    if train:
+      examples_queue = tf.RandomShuffleQueue(
+          capacity=examples_per_shard * 4,
+          min_after_dequeue=examples_per_shard,
+          dtypes=[tf.string])
+    else:
+      examples_queue = tf.FIFOQueue(
+          capacity=examples_per_shard * 4,
+          dtypes=[tf.string])
+
+    if num_readers > 1:
+      enqueue_ops = []
+      for _ in range(num_readers):
+        reader = tf.TFRecordReader()
+        _, value = reader.read(filename_queue)
+        enqueue_ops.append(examples_queue.enqueue([value]))
+
+      tf.train.queue_runner.add_queue_runner(
+          tf.train.queue_runner.QueueRunner(examples_queue, enqueue_ops))
+      example_serialized = examples_queue.dequeue()
+    else:
+      reader = tf.TFRecordReader()
+      _, example_serialized = reader.read(filename_queue)
+
+    image_buffer, label_index, bbox, class_text = __parse_example_proto(example_serialized)
     image = tf.image.decode_jpeg(image_buffer, channels=3)
     image = tf.image.convert_image_dtype(image, dtype=tf.float32)
     resize_image = tf.image.resize_images(image, [FLAGS.resize_size, FLAGS.resize_size])
@@ -165,7 +191,7 @@ class DataProvider:
         self.data = data
         self.training = training
 
-    def generate_batches(self, batch_size, min_queue_examples=1024, num_threads=8):
+    def generate_batches(self, batch_size, min_queue_examples=1024, num_threads=16):
         """Construct a queued batch of images and labels.
 
         Args:

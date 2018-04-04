@@ -221,10 +221,8 @@ def train(model, dataset, optimizer,
                             name='total_losses')
                         tf.add_to_collection('total_losses', total_loss)
                     reuse = True
-                    trainable_variables = tf.trainable_variables()
-                    grads = tf.gradients(total_loss, trainable_variables)
-                    grads_vars = zip(grads, trainable_variables)
-                    tower_grads.append(grads_vars)
+                    grads = opt.compute_gradients(total_loss)
+                    tower_grads.append(grads)
             accuracy = tf.reduce_mean(
                 tf.cast(tf.nn.in_top_k(y, yt_splits[i], 1), tf.float32),
                 name='accuracies')
