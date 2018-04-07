@@ -141,10 +141,22 @@ def __parse_example_proto(example_serialized):
 
   return features['image/encoded'], label, bbox, features['image/class/text']
 
+def __parse_scale_example_proto(example_serialized):
+  feature_map = {
+      'image/encoded': tf.FixedLenFeature([], dtype=tf.string,
+                                          default_value=''),
+      'image/label': tf.FixedLenFeature([1], dtype=tf.int64,
+                                              default_value=-1),
+  }
 
-def __read_imagenet(data_files, train=True, num_readers=32):
+  features = tf.parse_single_example(example_serialized, feature_map)
+  label = tf.cast(features['image/label'], dtype=tf.int32)
+
+  return features['image/encoded'], label
+
+def __read_imagenet(data_files, train=True, num_readers=4):
     if train:
-      filename_queue = tf.train.string_input_producer(data_files, shuffle=True, capacity=16)
+      filename_queue = tf.train.string_input_producer(data_files, shuffle=True, capacity=8)
     else:
       filename_queue = tf.train.string_input_producer(data_files, shuffle=False, capacity=1)
 
@@ -185,13 +197,55 @@ def __read_imagenet(data_files, train=True, num_readers=32):
     resize_image = tf.image.resize_images(image, [FLAGS.resize_size, FLAGS.resize_size])
     return resize_image, label_index - 1
 
+def __read_imagenet_scale(data_files, train=True, num_readers=4):
+    if train:
+      filename_queue = tf.train.string_input_producer(data_files, shuffle=True, capacity=8)
+    else:
+      filename_queue = tf.train.string_input_producer(data_files, shuffle=False, capacity=1)
+
+    # Approximate number of examples per shard.
+    examples_per_shard = 1024
+    # Size the random shuffle queue to balance between good global
+    # mixing (more examples) and memory use (fewer examples).
+    # 1 image uses 299*299*3*4 bytes = 1MB
+    # The default input_queue_memory_factor is 16 implying a shuffling queue
+    # size: examples_per_shard * 16 * 1MB = 17.6GB
+    if train:
+      examples_queue = tf.RandomShuffleQueue(
+          capacity=examples_per_shard * 4,
+          min_after_dequeue=examples_per_shard,
+          dtypes=[tf.string])
+    else:
+      examples_queue = tf.FIFOQueue(
+          capacity=examples_per_shard * 4,
+          dtypes=[tf.string])
+
+    if num_readers > 1:
+      enqueue_ops = []
+      for _ in range(num_readers):
+        reader = tf.TFRecordReader()
+        _, value = reader.read(filename_queue)
+        enqueue_ops.append(examples_queue.enqueue([value]))
+
+      tf.train.queue_runner.add_queue_runner(
+          tf.train.queue_runner.QueueRunner(examples_queue, enqueue_ops))
+      example_serialized = examples_queue.dequeue()
+    else:
+      reader = tf.TFRecordReader()
+      _, example_serialized = reader.read(filename_queue)
+
+    image_buffer, label_index = __parse_scale_example_proto(example_serialized)
+    image = tf.image.decode_jpeg(image_buffer, channels=3)
+    image = tf.image.convert_image_dtype(image, dtype=tf.float32)
+    return image, label_index
+
 class DataProvider:
     def __init__(self, data, size=None, training=True):
         self.size = size or [None]*4
         self.data = data
         self.training = training
 
-    def generate_batches(self, batch_size, min_queue_examples=1024, num_threads=16):
+    def generate_batches(self, batch_size, min_queue_examples=1024, num_threads=2):
         """Construct a queued batch of images and labels.
 
         Args:
@@ -294,6 +348,20 @@ def get_data_provider(name, training=True):
             assert data_files, 'No files found for dataset %s/%s at %s' %(
                                self.name, 'validation', FLAGS.imagenet_valid_data_dir)
             return DataProvider(__read_imagenet(data_files), [50000, FLAGS.crop_size, FLAGS.crop_size, 3], True)
+
+    if name == 'imagenet_scale':
+        if training:
+            tf_record_pattern = os.path.join(FLAGS.imagenet_train_data_dir, '%s-*' % 'train')
+            data_files = tf.gfile.Glob(tf_record_pattern)
+            assert data_files, 'No files found for dataset %s/%s at %s'%(
+                               self.name, 'train', FLAGS.imagenet_train_data_dir)
+            return DataProvider(__read_imagenet_scale(data_files), [1281167, FLAGS.crop_size, FLAGS.crop_size, 3], True)
+        else:
+            tf_record_pattern = os.path.join(FLAGS.imagenet_valid_data_dir, '%s-*' % 'validation')
+            data_files = tf.gfile.Glob(tf_record_pattern)
+            assert data_files, 'No files found for dataset %s/%s at %s' %(
+                               self.name, 'validation', FLAGS.imagenet_valid_data_dir)
+            return DataProvider(__read_imagenet_scale(data_files), [50000, FLAGS.crop_size, FLAGS.crop_size, 3], True)
 
     elif name == 'cifar10':
         path = os.path.join(FLAGS.cifar_data_dir,'cifar10')

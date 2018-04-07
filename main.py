@@ -28,12 +28,16 @@ tf.app.flags.DEFINE_integer('decay_epochs', 10,
                             """Iterations after which learning rate decays.""")
 tf.app.flags.DEFINE_float('grad_clip_norm', 1e1,
                           """Initial learning rate.""")
+tf.app.flags.DEFINE_float('momentum', 0.9,
+                          """Initial learning rate.""")
 tf.app.flags.DEFINE_string('model', 'model',
                            """Name of loaded model.""")
 tf.app.flags.DEFINE_string('save', timestr,
                            """Name of saved dir.""")
 tf.app.flags.DEFINE_string('load', None,
                            """Name of loaded dir.""")
+tf.app.flags.DEFINE_string('ckpt_file', '',
+                           """Name of ckpt file.""")
 tf.app.flags.DEFINE_string('dataset', 'cifar10',
                            """Name of dataset used.""")
 tf.app.flags.DEFINE_boolean('summary', False,
@@ -166,7 +170,7 @@ def train(model, dataset, optimizer,
         if optimizer == 'SGD':
             opt = tf.train.GradientDescentOptimizer(lr)
         elif optimizer == 'MOM':
-            opt = tf.train.MomentumOptimizer(lr, 0.9)
+            opt = tf.train.MomentumOptimizer(lr, FLAGS.momentum)
         elif optimizer == 'ADA':
             opt = tf.train.AdamOptimizer(lr)
         else:
