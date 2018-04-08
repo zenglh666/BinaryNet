@@ -294,6 +294,11 @@ def train(model, dataset, optimizer,
                 logger.info('Cunrrent step: %d, Loss: %.3f' % (curr_step, loss_val))
         logger.info('End pre-training...')
 
+    if FLAGS.ckpt_file != '':
+        ckpt_file_name = os.path.join(checkpoint_dir, '..', FLAGS.ckpt_file)
+        saver.restore(sess, ckpt_file_name)
+        sess.run(tf.assign(global_step,0))
+
     while epoch != num_epochs:
         epoch += 1
         curr_count = 0

@@ -12,6 +12,8 @@ tf.app.flags.DEFINE_float('weight_norm_factor', 0.0001,
                           """regularizer norm.""")
 tf.app.flags.DEFINE_boolean('weight_norm', False,
                            """if norm weight.""")
+tf.app.flags.DEFINE_integer('bit', 1,
+                               """number of bit""")
 FLAGS = tf.app.flags.FLAGS
 regularizer = None
     
@@ -23,7 +25,7 @@ def binarize(x):
 
     with ops.name_scope("Binarized") as name:
         with g.gradient_override_map({"Sign": "Identity"}):
-            #x=tf.clip_by_value(x,-1,1)
+            x=tf.clip_by_value(x,-1,1)
             return tf.sign(x)
 
 def BinarizedSpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
@@ -33,13 +35,6 @@ def BinarizedSpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
         with tf.variable_scope(name, values=[x], reuse=reuse):
             w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
                             initializer=tf.variance_scaling_initializer(mode='fan_avg'))
-
-            if FLAGS.weight_norm and (not reuse) :
-                mean = tf.reduce_mean(w)
-                variance = tf.sqrt(tf.reduce_mean(tf.square(w - mean)))
-                std = tf.sqrt(2. / tf.cast(nInputPlane + nOutputPlane, tf.float32))
-                w_norm = tf.multiply(tf.div(tf.subtract(w, mean), variance), std)
-                tf.add_to_collection(tf.GraphKeys.UPDATE_OPS, tf.assign(w, w_norm))
 
             bin_w = binarize(w)
             bin_x = binarize(x)
@@ -72,6 +67,66 @@ def BinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
             return out
     return bc_conv2d
 
+def AccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
+        padding='VALID', bias=True, name='BinarizedWeightOnlySpatialConvolution'):
+    '''
+    This function is used only at the first layer of the model as we dont want to binarized the RGB images
+    '''
+    def bc_conv2d(x, is_training=True, reuse=None):
+        nInputPlane = x.get_shape().as_list()[3]
+        with tf.variable_scope(name, values=[x], reuse=reuse):
+            w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
+                            initializer=tf.variance_scaling_initializer(mode='fan_avg'))
+            for i in range(FLAGS.bit):
+                if i == 0:
+                    bin_w = binarize(w)
+                    alpha = tf.reduce_mean(tf.abs(w))
+                    w_mul = tf.multiply(bin_w, alpha)
+                    w_apr = tf.identity(w_mul)
+                    w_res = tf.subtract(w, w_mul)
+                else:
+                    bin_w = binarize(w_res)
+                    alpha = tf.reduce_mean(tf.abs(w_res))
+                    w_mul = tf.multiply(bin_w, alpha)
+                    w_apr = tf.add(w_apr, w_mul)
+                    w_res = tf.subtract(w_res, w_mul)
+            out = tf.nn.conv2d(tf.clip_by_value(x,-1,1), w_apr, strides=[1, dH, dW, 1], padding=padding)
+            if bias:
+                b = tf.get_variable('bias', [nOutputPlane],initializer=tf.zeros_initializer)
+                out = tf.nn.bias_add(out, b)
+            return out
+    return bc_conv2d
+
+def MoreAccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
+        padding='VALID', bias=True, name='BinarizedWeightOnlySpatialConvolution'):
+    '''
+    This function is used only at the first layer of the model as we dont want to binarized the RGB images
+    '''
+    def bc_conv2d(x, is_training=True, reuse=None):
+        nInputPlane = x.get_shape().as_list()[3]
+        with tf.variable_scope(name, values=[x], reuse=reuse):
+            w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
+                            initializer=tf.variance_scaling_initializer(mode='fan_avg'))
+            for i in range(FLAGS.bit):
+                if i == 0:
+                    bin_w = binarize(w)
+                    alpha = tf.reduce_mean(tf.abs(w), axis=[0,1,2], keep_dims=True)
+                    w_mul = tf.multiply(bin_w, alpha)
+                    w_apr = tf.identity(w_mul)
+                    w_res = tf.subtract(w, w_mul)
+                else:
+                    bin_w = binarize(w_res)
+                    alpha = tf.reduce_mean(tf.abs(w_res), axis=[0,1,2], keep_dims=True)
+                    w_mul = tf.multiply(bin_w, alpha)
+                    w_apr = tf.add(w_apr, w_mul)
+                    w_res = tf.subtract(w_res, w_mul)
+            out = tf.nn.conv2d(tf.clip_by_value(x,-1,1), w_apr, strides=[1, dH, dW, 1], padding=padding)
+            if bias:
+                b = tf.get_variable('bias', [nOutputPlane],initializer=tf.zeros_initializer)
+                out = tf.nn.bias_add(out, b)
+            return out
+    return bc_conv2d
+
 def SpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
         padding='VALID', bias=True, name='SpatialConvolution'):
     def conv2d(x, is_training=True, reuse=None):
@@ -97,8 +152,7 @@ def SpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
                 if is_training:
                     apply_op = ema.apply([x_variance])
                     tf.add_to_collection(tf.GraphKeys.UPDATE_OPS, apply_op)
-                    with tf.control_dependencies([apply_op]):
-                        avg_x_variance = tf.identity(x_variance)
+                    avg_x_variance = tf.identity(x_variance)
                 else:
                     avg_x_variance = ema.average(x_variance)
 
