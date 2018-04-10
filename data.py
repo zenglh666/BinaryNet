@@ -154,9 +154,9 @@ def __parse_scale_example_proto(example_serialized):
 
   return features['image/encoded'], label
 
-def __read_imagenet(data_files, train=True, num_readers=4):
+def __read_imagenet(data_files, train=True, num_readers=32):
     if train:
-      filename_queue = tf.train.string_input_producer(data_files, shuffle=True, capacity=8)
+      filename_queue = tf.train.string_input_producer(data_files, shuffle=True, capacity=16)
     else:
       filename_queue = tf.train.string_input_producer(data_files, shuffle=False, capacity=1)
 
@@ -197,11 +197,8 @@ def __read_imagenet(data_files, train=True, num_readers=4):
     resize_image = tf.image.resize_images(image, [FLAGS.resize_size, FLAGS.resize_size])
     return resize_image, label_index - 1
 
-def __read_imagenet_scale(data_files, train=True, num_readers=4):
-    if train:
-      filename_queue = tf.train.string_input_producer(data_files, shuffle=True, capacity=8)
-    else:
-      filename_queue = tf.train.string_input_producer(data_files, shuffle=False, capacity=1)
+def __read_imagenet_scale(data_files, train=True, num_readers=32):
+    filename_queue = tf.train.string_input_producer(data_files, shuffle=False, capacity=32)
 
     # Approximate number of examples per shard.
     examples_per_shard = 1024
@@ -245,7 +242,7 @@ class DataProvider:
         self.data = data
         self.training = training
 
-    def generate_batches(self, batch_size, min_queue_examples=1024, num_threads=2):
+    def generate_batches(self, batch_size, min_queue_examples=1024, num_threads=4):
         """Construct a queued batch of images and labels.
 
         Args:
@@ -264,18 +261,18 @@ class DataProvider:
 
         image, label = self.data
         if self.training:
-            image_processed = preprocess_training(image, height=self.size[1], width=self.size[2])
-            image_and_label = [image_processed, label]
-            images, label_batch = tf.train.shuffle_batch(
+          image_processed = preprocess_training(image, height=self.size[1], width=self.size[2])
+          image_and_label = [image_processed, label]
+          images, label_batch = tf.train.shuffle_batch(
             image_and_label,
             batch_size=batch_size,
             num_threads=num_threads,
             capacity=min_queue_examples + 8 * batch_size,
             min_after_dequeue=min_queue_examples)
         else:
-            image_processed = preprocess_evaluation(image, height=self.size[1], width=self.size[2])
-            image_and_label = [image_processed, label]
-            images, label_batch = tf.train.batch(
+          image_processed = preprocess_evaluation(image, height=self.size[1], width=self.size[2])
+          image_and_label = [image_processed, label]
+          images, label_batch = tf.train.batch(
             image_and_label,
             batch_size=batch_size,
             num_threads=num_threads,
