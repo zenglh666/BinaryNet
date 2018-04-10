@@ -167,15 +167,21 @@ def train(model, dataset, optimizer,
             x, yt = data.generate_batches(batch_size)
 
         global_step =  tf.train.get_or_create_global_step()
-        lr = tf.train.exponential_decay(
-            initial_learning_rate, global_step, decay_step,
-            learning_rate_decay_factor, staircase=True)
 
         if optimizer == 'SGD':
+            lr = tf.train.exponential_decay(
+                initial_learning_rate, global_step, decay_step,
+                learning_rate_decay_factor, staircase=True)
             opt = tf.train.GradientDescentOptimizer(lr)
         elif optimizer == 'MOM':
+            lr = tf.train.exponential_decay(
+                initial_learning_rate, global_step, decay_step,
+                learning_rate_decay_factor, staircase=True)
             opt = tf.train.MomentumOptimizer(lr, FLAGS.momentum)
         elif optimizer == 'ADA':
+            lr = tf.train.exponential_decay(
+                initial_learning_rate, global_step, decay_step,
+                learning_rate_decay_factor, staircase=False)
             opt = tf.train.AdamOptimizer(lr)
         else:
             opt = None
