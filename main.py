@@ -26,6 +26,8 @@ tf.app.flags.DEFINE_float('learning_rate_decay_factor', 0.1,
                           """Learning rate decay factor.""")
 tf.app.flags.DEFINE_integer('decay_epochs', 10,
                             """Iterations after which learning rate decays.""")
+tf.app.flags.DEFINE_integer('test_epochs', 1,
+                            """Iterations after which test.""")
 tf.app.flags.DEFINE_float('grad_clip_norm', 1e1,
                           """Initial learning rate.""")
 tf.app.flags.DEFINE_float('momentum', 0.9,
@@ -48,6 +50,8 @@ tf.app.flags.DEFINE_string('optimizer', 'SGD',
                            """optimizer for algorithms:MomentumOptimizer(MOM),
                            GradientDescentOptimizer(SGD), AdamOptimizer(ADA)""")
 tf.app.flags.DEFINE_integer('num_gpu', 1,
+                               """number of gpus to use.If 0 then cpu""")
+tf.app.flags.DEFINE_integer('shift_gpu', 0,
                                """number of gpus to use.If 0 then cpu""")
 tf.app.flags.DEFINE_boolean('debug', False,
                            """if debug.""")
@@ -208,7 +212,7 @@ def train(model, dataset, optimizer,
             if if_debug:
                 device_str = '/gpu:0'
             else:
-                device_str = '/gpu:'+str(i)
+                device_str = '/gpu:'+str(i + FLAGS.shift_gpu)
             with tf.device(device_str):
                 with tf.name_scope('%s_%d' % ('tower', i)) as scope:
                     y = model(x_splits[i], is_training=True, reuse=reuse)
@@ -318,16 +322,17 @@ def train(model, dataset, optimizer,
         logger.info('Training Accuracy: %.3f' % acc_value)
         logger.info('Training Loss: %.3f' % loss_value)
 
-        test_acc1, test_acc5, test_loss = evaluate(model, dataset,
-                                                   batch_size=batch_size//2,
-                                                   if_debug=if_debug,
-                                                   checkpoint_dir=checkpoint_dir)  # ,
-        # log_dir=log_dir)
-        logger.info('Test Accuracy Top-1: %.3f' % test_acc1)
-        logger.info('Test Accuracy Top-5: %.3f' % test_acc5)
-        logger.info('Test Loss: %.3f' % test_loss)
+        if epoch % FLAGS.test_epochs == 0:
+          test_acc1, test_acc5, test_loss = evaluate(model, dataset,
+                                                     batch_size=batch_size//2,
+                                                     if_debug=if_debug,
+                                                     checkpoint_dir=checkpoint_dir)  # ,
+          # log_dir=log_dir)
+          logger.info('Test Accuracy Top-1: %.3f' % test_acc1)
+          logger.info('Test Accuracy Top-5: %.3f' % test_acc5)
+          logger.info('Test Loss: %.3f' % test_loss)
 
-        summary_writer.add_summary(summary, step)
+          summary_writer.add_summary(summary, step)
 
     # When done, ask the threads to stop.
     coord.request_stop()
