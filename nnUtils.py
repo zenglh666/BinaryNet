@@ -14,6 +14,8 @@ tf.app.flags.DEFINE_boolean('weight_norm', False,
                            """if norm weight.""")
 tf.app.flags.DEFINE_integer('bit', 1,
                                """number of bit""")
+tf.app.flags.DEFINE_float('zeta', 0.0,
+                          """zeta.""")
 FLAGS = tf.app.flags.FLAGS
 regularizer = None
     
@@ -110,13 +112,15 @@ def MoreAccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1
             for i in range(FLAGS.bit):
                 if i == 0:
                     bin_w = binarize(w)
-                    alpha = tf.reduce_mean(tf.abs(w), axis=[0,1,2], keep_dims=True)
+                    alpha = tf.div(tf.reduce_mean(tf.pow(tf.abs(w),FLAGS.zeta + 1), axis=[0,1,2], keep_dims=True),
+                                   tf.reduce_mean(tf.pow(tf.abs(w),FLAGS.zeta), axis=[0,1,2], keep_dims=True))
                     w_mul = tf.multiply(bin_w, alpha)
                     w_apr = tf.identity(w_mul)
                     w_res = tf.subtract(w, w_mul)
                 else:
                     bin_w = binarize(w_res)
-                    alpha = tf.reduce_mean(tf.abs(w_res), axis=[0,1,2], keep_dims=True)
+                    alpha = tf.div(tf.reduce_mean(tf.pow(tf.abs(w_res),FLAGS.zeta + 1), axis=[0,1,2], keep_dims=True),
+                                   tf.reduce_mean(tf.pow(tf.abs(w_res),FLAGS.zeta), axis=[0,1,2], keep_dims=True))
                     w_mul = tf.multiply(bin_w, alpha)
                     w_apr = tf.add(w_apr, w_mul)
                     w_res = tf.subtract(w_res, w_mul)
