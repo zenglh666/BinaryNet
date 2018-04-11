@@ -27,7 +27,6 @@ def binarize(x):
 
     with ops.name_scope("Binarized") as name:
         with g.gradient_override_map({"Sign": "Identity"}):
-            x=tf.clip_by_value(x,-1,1)
             return tf.sign(x)
 
 def BinarizedSpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
@@ -61,8 +60,8 @@ def BinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
         with tf.variable_scope(name, values=[x], reuse=reuse):
             w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
                             initializer=tf.variance_scaling_initializer(mode='fan_avg'))
-            bin_w = binarize(w)
-            out = tf.nn.conv2d(tf.clip_by_value(x,-1,1), bin_w, strides=[1, dH, dW, 1], padding=padding)
+            bin_w = binarize(tf.clip_by_value(w,-1,1))
+            out = tf.nn.conv2d(x, bin_w, strides=[1, dH, dW, 1], padding=padding)
             if bias:
                 b = tf.get_variable('bias', [nOutputPlane],initializer=tf.zeros_initializer)
                 out = tf.nn.bias_add(out, b)
@@ -79,6 +78,7 @@ def AccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH
         with tf.variable_scope(name, values=[x], reuse=reuse):
             w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
                             initializer=tf.variance_scaling_initializer(mode='fan_avg'))
+            w = tf.clip_by_value(w,-1,1)
             for i in range(FLAGS.bit):
                 if i == 0:
                     bin_w = binarize(w)
@@ -92,7 +92,7 @@ def AccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH
                     w_mul = tf.multiply(bin_w, alpha)
                     w_apr = tf.add(w_apr, w_mul)
                     w_res = tf.subtract(w_res, w_mul)
-            out = tf.nn.conv2d(tf.clip_by_value(x,-1,1), w_apr, strides=[1, dH, dW, 1], padding=padding)
+            out = tf.nn.conv2d(x, w_apr, strides=[1, dH, dW, 1], padding=padding)
             if bias:
                 b = tf.get_variable('bias', [nOutputPlane],initializer=tf.zeros_initializer)
                 out = tf.nn.bias_add(out, b)
@@ -124,7 +124,7 @@ def MoreAccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1
                     w_mul = tf.multiply(bin_w, alpha)
                     w_apr = tf.add(w_apr, w_mul)
                     w_res = tf.subtract(w_res, w_mul)
-            out = tf.nn.conv2d(tf.clip_by_value(x,-1,1), w_apr, strides=[1, dH, dW, 1], padding=padding)
+            out = tf.nn.conv2d(x, w_apr, strides=[1, dH, dW, 1], padding=padding)
             if bias:
                 b = tf.get_variable('bias', [nOutputPlane],initializer=tf.zeros_initializer)
                 out = tf.nn.bias_add(out, b)
@@ -216,6 +216,7 @@ def BinarizedWeightOnlyAffine(nOutputPlane, bias=True, name=None):
             nInputPlane = reshaped.get_shape().as_list()[1]
             w = tf.get_variable('weight', [nInputPlane, nOutputPlane],
                 initializer=tf.variance_scaling_initializer(mode='fan_avg'))
+            w = tf.clip_by_value(w,-1,1)
             bin_w = binarize(w)
             output = tf.matmul(reshaped, bin_w)
             if bias:
@@ -257,6 +258,11 @@ def HardTanh(name='HardTanh'):
             return tf.clip_by_value(x,-1,1)
     return layer
 
+def HardTanhReLU(name='HardTanh'):
+    def layer(x, is_training=True, reuse=None):
+        with tf.variable_scope(name, values=[x], reuse=reuse):
+            return tf.clip_by_value(x,0,1)
+    return layer
 
 def View(shape, name='View', reuse=None):
     with tf.variable_scope(name, values=[x], reuse=reuse):
