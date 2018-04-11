@@ -12,11 +12,11 @@ import csv
 import glob
 import re
 
-tf.app.flags.DEFINE_string('imagenet_train_data_dir', 'E:/data2/imagenet_train_tfrecord',
+tf.app.flags.DEFINE_string('imagenet_train_data_dir', 'F:/data/imagenet_short_scale256_train_tfrecord',
                            """Path to the imagenet data directory.""")
-tf.app.flags.DEFINE_string('imagenet_valid_data_dir', 'E:/data2/imagenet_valid_tfrecord',
+tf.app.flags.DEFINE_string('imagenet_valid_data_dir', 'F:/data/imagenet_short_scale256_valid_tfrecord',
                            """Path to the imagenet data directory.""")
-tf.app.flags.DEFINE_string('cifar_data_dir', 'E:/data2/Cifar/',
+tf.app.flags.DEFINE_string('cifar_data_dir', 'F:/data/Cifar/',
                            """Path to the cifar data directory.""")
 tf.app.flags.DEFINE_integer('resize_size', 256,
                             """Provide square images of this size.""")
