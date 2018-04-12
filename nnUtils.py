@@ -8,10 +8,6 @@ tf.app.flags.DEFINE_string('regularizer', 'None',
                            """regularizer for weights:L1(L1),L2(L2)""")
 tf.app.flags.DEFINE_float('regularizer_norm', 0.0001,
                           """regularizer norm.""")
-tf.app.flags.DEFINE_float('weight_norm_factor', 0.0001,
-                          """regularizer norm.""")
-tf.app.flags.DEFINE_boolean('weight_norm', False,
-                           """if norm weight.""")
 tf.app.flags.DEFINE_integer('bit', 1,
                                """number of bit""")
 tf.app.flags.DEFINE_float('zeta', 0.0,
@@ -82,13 +78,21 @@ def AccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH
             for i in range(FLAGS.bit):
                 if i == 0:
                     bin_w = binarize(w)
-                    alpha = tf.reduce_mean(tf.abs(w))
+                    if FLAGS.zeta < 0.5:
+                        alpha = tf.reduce_mean(tf.abs(w))
+                    else:
+                        alpha = tf.div(tf.reduce_mean(tf.pow(tf.abs(w),FLAGS.zeta + 1)),
+                                       tf.reduce_mean(tf.pow(tf.abs(w),FLAGS.zeta)))
                     w_mul = tf.multiply(bin_w, alpha)
                     w_apr = tf.identity(w_mul)
                     w_res = tf.subtract(w, w_mul)
                 else:
                     bin_w = binarize(w_res)
-                    alpha = tf.reduce_mean(tf.abs(w_res))
+                    if FLAGS.zeta < 0.5:
+                        alpha = tf.reduce_mean(tf.abs(w))
+                    else:
+                        alpha = tf.div(tf.reduce_mean(tf.pow(tf.abs(w),FLAGS.zeta + 1)),
+                                       tf.reduce_mean(tf.pow(tf.abs(w),FLAGS.zeta)))
                     w_mul = tf.multiply(bin_w, alpha)
                     w_apr = tf.add(w_apr, w_mul)
                     w_res = tf.subtract(w_res, w_mul)
@@ -113,15 +117,21 @@ def MoreAccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1
             for i in range(FLAGS.bit):
                 if i == 0:
                     bin_w = binarize(w)
-                    alpha = tf.div(tf.reduce_mean(tf.pow(tf.abs(w),FLAGS.zeta + 1), axis=[0,1,2], keep_dims=True),
-                                   tf.reduce_mean(tf.pow(tf.abs(w),FLAGS.zeta), axis=[0,1,2], keep_dims=True))
+                    if FLAGS.zeta < 0.5:
+                        alpha = tf.reduce_mean(tf.abs(w), axis=[0,1,2], keep_dims=True)
+                    else:
+                        alpha = tf.div(tf.reduce_mean(tf.pow(tf.abs(w),FLAGS.zeta + 1), axis=[0,1,2], keep_dims=True),
+                                       tf.reduce_mean(tf.pow(tf.abs(w),FLAGS.zeta), axis=[0,1,2], keep_dims=True))
                     w_mul = tf.multiply(bin_w, alpha)
                     w_apr = tf.identity(w_mul)
                     w_res = tf.subtract(w, w_mul)
                 else:
                     bin_w = binarize(w_res)
-                    alpha = tf.div(tf.reduce_mean(tf.pow(tf.abs(w_res),FLAGS.zeta + 1), axis=[0,1,2], keep_dims=True),
-                                   tf.reduce_mean(tf.pow(tf.abs(w_res),FLAGS.zeta), axis=[0,1,2], keep_dims=True))
+                    if FLAGS.zeta < 0.5:
+                        alpha = tf.reduce_mean(tf.abs(w_res), axis=[0,1,2], keep_dims=True)
+                    else:
+                        alpha = tf.div(tf.reduce_mean(tf.pow(tf.abs(w_res),FLAGS.zeta + 1), axis=[0,1,2], keep_dims=True),
+                                       tf.reduce_mean(tf.pow(tf.abs(w_res),FLAGS.zeta), axis=[0,1,2], keep_dims=True))
                     w_mul = tf.multiply(bin_w, alpha)
                     w_apr = tf.add(w_apr, w_mul)
                     w_res = tf.subtract(w_res, w_mul)
@@ -140,30 +150,6 @@ def SpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
             w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
                             initializer=tf.variance_scaling_initializer(mode='fan_avg'),
                             regularizer=regularizer)
-            if FLAGS.weight_norm:
-                w_mean = tf.get_variable('w_mean', [1,1,w.shape[2],1],
-                            initializer=tf.constant_initializer(0.), trainable=False)
-                beta = tf.get_variable('beta', [1,1,w.shape[2],1],
-                            initializer=tf.constant_initializer(0.), trainable=False)
-                gamma = tf.get_variable('gamma', [1,1,w.shape[2],1],
-                            initializer=tf.constant_initializer(1.), trainable=False)
-
-        if FLAGS.weight_norm:
-            with tf.variable_scope(name + '/bn', reuse=(not is_training)):
-                _, x_variance = tf.nn.moments(x, axes=[0, 1, 2], keep_dims=True)
-                x_variance = tf.transpose(x_variance, perm=[0, 1, 3, 2])
-
-                ema = tf.train.ExponentialMovingAverage(decay=(1-FLAGS.weight_norm_factor))
-                if is_training:
-                    apply_op = ema.apply([x_variance])
-                    tf.add_to_collection(tf.GraphKeys.UPDATE_OPS, apply_op)
-                    avg_x_variance = tf.identity(x_variance)
-                else:
-                    avg_x_variance = ema.average(x_variance)
-
-                w = tf.nn.batch_normalization(w, w_mean, avg_x_variance, beta, gamma, 1e-3)
-
-        with tf.variable_scope(name, values=[x], reuse=reuse):
             out = tf.nn.conv2d(x, w, strides=[1, dH, dW, 1], padding=padding)
             if bias:
                 b = tf.get_variable('bias', [nOutputPlane],initializer=tf.zeros_initializer)
