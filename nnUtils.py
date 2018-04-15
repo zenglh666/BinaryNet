@@ -12,6 +12,8 @@ tf.app.flags.DEFINE_integer('bit', 1,
                                """number of bit""")
 tf.app.flags.DEFINE_float('zeta', 0.0,
                           """zeta.""")
+tf.app.flags.DEFINE_boolean('weight_norm', False,
+                           """weight norm.""")
 FLAGS = tf.app.flags.FLAGS
 regularizer = None
     
@@ -113,7 +115,10 @@ def MoreAccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1
         with tf.variable_scope(name, values=[x], reuse=reuse):
             w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
                             initializer=tf.variance_scaling_initializer(mode='fan_avg'))
-            w = tf.clip_by_value(w,-1,1)
+            if FLAGS.weight_norm:
+                w = tf.layers.batch_normalization(w, axis=2, training=is_training, trainable=False, reuse=reuse, epsilon=1e-20)
+            else:
+                w = tf.clip_by_value(w,-1,1)
             for i in range(FLAGS.bit):
                 if i == 0:
                     bin_w = binarize(w)
