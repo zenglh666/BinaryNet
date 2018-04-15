@@ -18,6 +18,8 @@ tf.app.flags.DEFINE_string('imagenet_valid_data_dir', 'F:/data/imagenet_short_sc
                            """Path to the imagenet data directory.""")
 tf.app.flags.DEFINE_string('cifar_data_dir', 'F:/data/Cifar/',
                            """Path to the cifar data directory.""")
+tf.app.flags.DEFINE_string('mean_file', 'F:/data/imagenet_mean.npy',
+                           """Path to the imagenet data directory.""")
 tf.app.flags.DEFINE_integer('resize_size', 256,
                             """Provide square images of this size.""")
 tf.app.flags.DEFINE_integer('crop_size', 224,
@@ -25,6 +27,12 @@ tf.app.flags.DEFINE_integer('crop_size', 224,
 tf.app.flags.DEFINE_boolean('distort_color',False,
                             '''If we distort color''')
 FLAGS = tf.app.flags.FLAGS
+
+if dataset.name=='imagenet':
+  mean_array = np.transpose(tf.divide(np.load(FLAGS.mean_file), 256.), (2,1,0))
+  mean_tensor = tf.convert_to_tensor(mean_array, tf.float32)
+else:
+  mean_tensor = None
 
 def __read_cifar(filenames, cifar100=False, shuffle=True):
   """Reads and parses examples from CIFAR data files.
@@ -242,7 +250,7 @@ class DataProvider:
         self.data = data
         self.training = training
 
-    def generate_batches(self, batch_size, min_queue_examples=1024, num_threads=4):
+    def generate_batches(self, batch_size, min_queue_examples=1024, num_threads=2):
         """Construct a queued batch of images and labels.
 
         Args:
@@ -286,9 +294,17 @@ def preprocess_evaluation(img, height=None, width=None, normalize=None):
     img_size = img.get_shape().as_list()
     height = height or img_size[0]
     width = width or img_size[1]
+    if mean_tensor is not None:
+      img = tf.subtract(img, mean_tensor)
+
     preproc_image = tf.image.resize_image_with_crop_or_pad(img, height, width)
-    preproc_image = tf.subtract(preproc_image, 0.5)
-    preproc_image = tf.multiply(preproc_image, 2.0)
+
+    if mean_tensor is not None:
+      preproc_image = tf.multiply(preproc_image, 128.)
+    else:
+      preproc_image = tf.subtract(preproc_image, 0.5)
+      preproc_image = tf.multiply(preproc_image, 2.0)
+      
     if normalize:
          # Subtract off the mean and divide by the variance of the pixels.
         preproc_image = tf.image.per_image_standardization(preproc_image)
@@ -303,6 +319,8 @@ def preprocess_training(img, height=None, width=None, normalize=None):
     # distortions applied to the image.
 
     # Randomly crop a [height, width] section of the image.
+    if mean_tensor is not None:
+      image = tf.subtract(image, mean_tensor)
     distorted_image = tf.random_crop(img, [height, width, 3])
 
     # Randomly flip the image horizontally.
@@ -314,8 +332,12 @@ def preprocess_training(img, height=None, width=None, normalize=None):
       distorted_image = tf.image.random_brightness(distorted_image,max_delta=32. / 255.)
       distorted_image = tf.image.random_contrast(distorted_image,lower=0.5, upper=1.5)
 
-    distorted_image = tf.subtract(distorted_image, 0.5)
-    distorted_image = tf.multiply(distorted_image, 2.0)
+    if mean_tensor is not None:
+      distorted_image = tf.multiply(distorted_image, 128.)
+    else:
+      distorted_image = tf.subtract(distorted_image, 0.5)
+      distorted_image = tf.multiply(distorted_image, 2.0)
+
     if normalize:
         # Subtract off the mean and divide by the variance of the pixels.
         distorted_image = tf.image.per_image_standardization(distorted_image)
