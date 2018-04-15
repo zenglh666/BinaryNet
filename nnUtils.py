@@ -77,27 +77,14 @@ def AccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH
             w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
                             initializer=tf.variance_scaling_initializer(mode='fan_avg'))
             w = tf.clip_by_value(w,-1,1)
+            w_res = tf.identity(w)
+            w_apr = tf.zeros(w.get_shape())
             for i in range(FLAGS.bit):
-                if i == 0:
-                    bin_w = binarize(w)
-                    if FLAGS.zeta < 0.5:
-                        alpha = tf.reduce_mean(tf.abs(w))
-                    else:
-                        alpha = tf.div(tf.reduce_mean(tf.pow(tf.abs(w),FLAGS.zeta + 1)),
-                                       tf.reduce_mean(tf.pow(tf.abs(w),FLAGS.zeta)))
-                    w_mul = tf.multiply(bin_w, alpha)
-                    w_apr = tf.identity(w_mul)
-                    w_res = tf.subtract(w, w_mul)
-                else:
-                    bin_w = binarize(w_res)
-                    if FLAGS.zeta < 0.5:
-                        alpha = tf.reduce_mean(tf.abs(w))
-                    else:
-                        alpha = tf.div(tf.reduce_mean(tf.pow(tf.abs(w),FLAGS.zeta + 1)),
-                                       tf.reduce_mean(tf.pow(tf.abs(w),FLAGS.zeta)))
-                    w_mul = tf.multiply(bin_w, alpha)
-                    w_apr = tf.add(w_apr, w_mul)
-                    w_res = tf.subtract(w_res, w_mul)
+                bin_w = binarize(w_res)
+                alpha = tf.reduce_mean(tf.abs(w_res))
+                w_mul = tf.multiply(bin_w, alpha)
+                w_apr = tf.add(w_apr, w_mul)
+                w_res = tf.subtract(w_res, w_mul)
             out = tf.nn.conv2d(x, w_apr, strides=[1, dH, dW, 1], padding=padding)
             if bias:
                 b = tf.get_variable('bias', [nOutputPlane],initializer=tf.zeros_initializer)
@@ -119,27 +106,20 @@ def MoreAccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1
                 w = tf.layers.batch_normalization(w, axis=2, training=is_training, trainable=False, reuse=reuse, epsilon=1e-20)
             else:
                 w = tf.clip_by_value(w,-1,1)
+
+            w_pow = tf.pow(tf.abs(w),FLAGS.zeta)
+            w_pow_mean = tf.reduce_mean(w_pow, axis=[0,1,2], keep_dims=True)
+            w_res = tf.identity(w)
+            w_apr = tf.zeros(w.get_shape())
             for i in range(FLAGS.bit):
-                if i == 0:
-                    bin_w = binarize(w)
-                    if FLAGS.zeta < 0.5:
-                        alpha = tf.reduce_mean(tf.abs(w), axis=[0,1,2], keep_dims=True)
-                    else:
-                        alpha = tf.div(tf.reduce_mean(tf.pow(tf.abs(w),FLAGS.zeta + 1), axis=[0,1,2], keep_dims=True),
-                                       tf.reduce_mean(tf.pow(tf.abs(w),FLAGS.zeta), axis=[0,1,2], keep_dims=True))
-                    w_mul = tf.multiply(bin_w, alpha)
-                    w_apr = tf.identity(w_mul)
-                    w_res = tf.subtract(w, w_mul)
+                bin_w = binarize(w_res)
+                if FLAGS.zeta < 0.5:
+                    alpha = tf.reduce_mean(tf.abs(w_res), axis=[0,1,2], keep_dims=True)
                 else:
-                    bin_w = binarize(w_res)
-                    if FLAGS.zeta < 0.5:
-                        alpha = tf.reduce_mean(tf.abs(w_res), axis=[0,1,2], keep_dims=True)
-                    else:
-                        alpha = tf.div(tf.reduce_mean(tf.pow(tf.abs(w_res),FLAGS.zeta + 1), axis=[0,1,2], keep_dims=True),
-                                       tf.reduce_mean(tf.pow(tf.abs(w_res),FLAGS.zeta), axis=[0,1,2], keep_dims=True))
-                    w_mul = tf.multiply(bin_w, alpha)
-                    w_apr = tf.add(w_apr, w_mul)
-                    w_res = tf.subtract(w_res, w_mul)
+                    alpha = tf.div(tf.reduce_mean(tf.multiply(w_pow, tf.abs(w_res)), axis=[0,1,2], keep_dims=True), w_pow_mean)
+                w_mul = tf.multiply(bin_w, alpha)
+                w_apr = tf.add(w_apr, w_mul)
+                w_res = tf.subtract(w_res, w_mul)
             out = tf.nn.conv2d(x, w_apr, strides=[1, dH, dW, 1], padding=padding)
             if bias:
                 b = tf.get_variable('bias', [nOutputPlane],initializer=tf.zeros_initializer)
