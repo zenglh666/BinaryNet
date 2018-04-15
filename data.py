@@ -11,6 +11,7 @@ from six.moves import urllib
 import csv
 import glob
 import re
+import numpy as np
 
 tf.app.flags.DEFINE_string('imagenet_train_data_dir', 'F:/data/imagenet_short_scale256_train_tfrecord',
                            """Path to the imagenet data directory.""")
@@ -316,7 +317,7 @@ def preprocess_training(img, height=None, width=None, normalize=None):
 
     # Randomly crop a [height, width] section of the image.
     if mean_tensor is not None:
-      image = tf.subtract(image, mean_tensor)
+      img = tf.subtract(img, mean_tensor)
     distorted_image = tf.random_crop(img, [height, width, 3])
 
     # Randomly flip the image horizontally.
