@@ -18,7 +18,7 @@ tf.app.flags.DEFINE_string('imagenet_valid_data_dir', 'F:/data/imagenet_short_sc
                            """Path to the imagenet data directory.""")
 tf.app.flags.DEFINE_string('cifar_data_dir', 'F:/data/Cifar/',
                            """Path to the cifar data directory.""")
-tf.app.flags.DEFINE_string('mean_file', 'F:/data/imagenet_mean.npy',
+tf.app.flags.DEFINE_string('mean_file', '',
                            """Path to the imagenet data directory.""")
 tf.app.flags.DEFINE_integer('resize_size', 256,
                             """Provide square images of this size.""")
@@ -352,8 +352,9 @@ def group_batch_images(x):
 def get_data_provider(name, training=True):
     global mean_tensor
     if name == 'imagenet':
-        mean_array = np.transpose(tf.divide(np.load(FLAGS.mean_file), 256.), (2,1,0))
-        mean_tensor = tf.convert_to_tensor(mean_array, tf.float32)
+        if FLAGS.mean_file != '':
+            mean_array = np.transpose(tf.divide(np.load(FLAGS.mean_file), 256.), (2,1,0))
+            mean_tensor = tf.convert_to_tensor(mean_array, tf.float32)
         if training:
             tf_record_pattern = os.path.join(FLAGS.imagenet_train_data_dir, '%s-*' % 'train')
             data_files = tf.gfile.Glob(tf_record_pattern)
@@ -368,8 +369,9 @@ def get_data_provider(name, training=True):
             return DataProvider(__read_imagenet(data_files), [50000, FLAGS.crop_size, FLAGS.crop_size, 3], True)
 
     if name == 'imagenet_scale':
-        mean_array = np.transpose(tf.divide(np.load(FLAGS.mean_file), 256.), (2,1,0))
-        mean_tensor = tf.convert_to_tensor(mean_array, tf.float32)
+        if FLAGS.mean_file != '':
+            mean_array = np.transpose(tf.divide(np.load(FLAGS.mean_file), 256.), (2,1,0))
+            mean_tensor = tf.convert_to_tensor(mean_array, tf.float32)
         if training:
             tf_record_pattern = os.path.join(FLAGS.imagenet_train_data_dir, '%s-*' % 'train')
             data_files = tf.gfile.Glob(tf_record_pattern)
