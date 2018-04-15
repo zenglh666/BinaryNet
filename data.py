@@ -28,11 +28,7 @@ tf.app.flags.DEFINE_boolean('distort_color',False,
                             '''If we distort color''')
 FLAGS = tf.app.flags.FLAGS
 
-if dataset.name=='imagenet':
-  mean_array = np.transpose(tf.divide(np.load(FLAGS.mean_file), 256.), (2,1,0))
-  mean_tensor = tf.convert_to_tensor(mean_array, tf.float32)
-else:
-  mean_tensor = None
+mean_tensor = None
 
 def __read_cifar(filenames, cifar100=False, shuffle=True):
   """Reads and parses examples from CIFAR data files.
@@ -304,7 +300,7 @@ def preprocess_evaluation(img, height=None, width=None, normalize=None):
     else:
       preproc_image = tf.subtract(preproc_image, 0.5)
       preproc_image = tf.multiply(preproc_image, 2.0)
-      
+
     if normalize:
          # Subtract off the mean and divide by the variance of the pixels.
         preproc_image = tf.image.per_image_standardization(preproc_image)
@@ -354,7 +350,10 @@ def group_batch_images(x):
 
 
 def get_data_provider(name, training=True):
+    global mean_tensor
     if name == 'imagenet':
+        mean_array = np.transpose(tf.divide(np.load(FLAGS.mean_file), 256.), (2,1,0))
+        mean_tensor = tf.convert_to_tensor(mean_array, tf.float32)
         if training:
             tf_record_pattern = os.path.join(FLAGS.imagenet_train_data_dir, '%s-*' % 'train')
             data_files = tf.gfile.Glob(tf_record_pattern)
@@ -369,6 +368,8 @@ def get_data_provider(name, training=True):
             return DataProvider(__read_imagenet(data_files), [50000, FLAGS.crop_size, FLAGS.crop_size, 3], True)
 
     if name == 'imagenet_scale':
+        mean_array = np.transpose(tf.divide(np.load(FLAGS.mean_file), 256.), (2,1,0))
+        mean_tensor = tf.convert_to_tensor(mean_array, tf.float32)
         if training:
             tf_record_pattern = os.path.join(FLAGS.imagenet_train_data_dir, '%s-*' % 'train')
             data_files = tf.gfile.Glob(tf_record_pattern)
