@@ -297,7 +297,6 @@ def train(model, dataset, optimizer,
     epoch = 0
 
     __count_params(tf.trainable_variables(), tf.get_collection(tf.GraphKeys.ACTIVATIONS))
-    sys.exit()
 
     if FLAGS.ckpt_file != '':
         ckpt_file_name = os.path.join(checkpoint_dir, '..', FLAGS.ckpt_file)

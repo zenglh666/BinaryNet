@@ -323,7 +323,10 @@ def ResidualV2(moduleList, connect=True, kW=2, kH=2, dW=2, dH=2, name='Residual'
             if connect:
                 output = tf.add(m(x, is_training=is_training, reuse=reuse), x)
             else:
-                x = tf.nn.avg_pool(x, ksize=[1, kW, kH, 1], strides=[1, dW, dH, 1], padding='SAME')
                 output = m(x, is_training=is_training, reuse=reuse)
+                x = tf.nn.avg_pool(x, ksize=[1, kW, kH, 1], strides=[1, dW, dH, 1], padding='SAME')
+                zero = tf.zeros(x.get_shape())
+                x = tf.concat([x,zero], axis=-1)
+                output = tf.add(output, x)
             return output
     return model
