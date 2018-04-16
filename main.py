@@ -40,6 +40,8 @@ tf.app.flags.DEFINE_string('load', None,
                            """Name of loaded dir.""")
 tf.app.flags.DEFINE_string('ckpt_file', '',
                            """Name of ckpt file.""")
+tf.app.flags.DEFINE_integer('ckpt_epoch', 0,
+                           """number of ckpt epoch.""")
 tf.app.flags.DEFINE_string('dataset', 'cifar10',
                            """Name of dataset used.""")
 tf.app.flags.DEFINE_boolean('summary', False,
@@ -294,7 +296,7 @@ def train(model, dataset, optimizer,
 
     num_batches = data.size[0] / batch_size
     summary_writer = tf.summary.FileWriter(log_dir, graph=sess.graph)
-    epoch = 0
+    epoch = FLAGS.ckpt_epoch
 
     __count_params(tf.trainable_variables(), tf.get_collection(tf.GraphKeys.ACTIVATIONS))
 

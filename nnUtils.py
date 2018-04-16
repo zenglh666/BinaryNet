@@ -76,7 +76,7 @@ def AccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH
         with tf.variable_scope(name, values=[x], reuse=reuse):
             w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
                             initializer=tf.variance_scaling_initializer(mode='fan_avg'))
-            #w = tf.clip_by_value(w,-1,1)
+            w = tf.clip_by_value(w,-1,1)
             w_res = tf.identity(w)
             w_apr = tf.zeros(w.get_shape())
             for i in range(FLAGS.bit):
@@ -113,7 +113,7 @@ def MoreAccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1
             w_apr = tf.zeros(w.get_shape())
             for i in range(FLAGS.bit):
                 bin_w = binarize(w_res)
-                if FLAGS.zeta < 0.5:
+                if FLAGS.zeta < 0.1:
                     alpha = tf.reduce_mean(tf.abs(w_res), axis=[0,1,2], keep_dims=True)
                 else:
                     alpha = tf.div(tf.reduce_mean(tf.multiply(w_pow, tf.abs(w_res)), axis=[0,1,2], keep_dims=True), w_pow_mean)
