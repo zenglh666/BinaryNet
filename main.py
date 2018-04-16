@@ -105,12 +105,16 @@ def __average_gradients(tower_grads):
       average_grads.append(grad_and_var)
     return average_grads
 
-def __count_params(var_list):
+def __count_params(var_list, activation_list):
     num = 0
     for var in var_list:
         if var is not None:
             num += var.get_shape().num_elements()
-    return num
+            logger.info('Layer Name: ' + var.name + ', Shape:' + str(var.get_shape().as_list()))
+    for activation in activation_list:
+        if activation is not None:
+            logger.info('Activaetion Name: ' + activation.name + ', Shape:' + str(activation.get_shape().as_list()))
+    logger.info('num of trainable paramaters: %d' % num)
 
 
 def __add_summaries(scalar_list=[], activation_list=[], var_list=[], grad_list=[], images=None):
@@ -292,8 +296,8 @@ def train(model, dataset, optimizer,
     summary_writer = tf.summary.FileWriter(log_dir, graph=sess.graph)
     epoch = 0
 
-    logger.info('num of trainable paramaters: %d' %
-          __count_params(tf.trainable_variables()))
+    __count_params(tf.trainable_variables(), tf.get_collection(tf.GraphKeys.ACTIVATIONS))
+    sys.exit()
 
     if FLAGS.ckpt_file != '':
         ckpt_file_name = os.path.join(checkpoint_dir, '..', FLAGS.ckpt_file)

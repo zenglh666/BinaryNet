@@ -76,7 +76,7 @@ def AccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH
         with tf.variable_scope(name, values=[x], reuse=reuse):
             w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
                             initializer=tf.variance_scaling_initializer(mode='fan_avg'))
-            w = tf.clip_by_value(w,-1,1)
+            #w = tf.clip_by_value(w,-1,1)
             w_res = tf.identity(w)
             w_apr = tf.zeros(w.get_shape())
             for i in range(FLAGS.bit):
@@ -263,7 +263,7 @@ def SpatialAveragePooling(kW, kH=None, dW=None, dH=None, padding='VALID',
 def BatchNormalization(name='BatchNormalization'):
     def batch_norm(x, is_training=True, reuse=None):
         with tf.variable_scope(name, values=[x], reuse=reuse):
-            return tf.layers.batch_normalization(x, training=is_training, reuse=reuse)
+            return tf.layers.batch_normalization(x, training=is_training, reuse=reuse, momentum=0.997, epsilon=1e-5)
     return batch_norm
 
 def LocalResposeNormalize(radius, alpha, beta, bias=1.0, name='LocalResposeNormalize'):
@@ -311,6 +311,19 @@ def Residual(moduleList, connect=True, name='Residual'):
             if connect:
                 output = tf.add(m(x, is_training=is_training, reuse=reuse), x)
             else:
+                output = m(x, is_training=is_training, reuse=reuse)
+            return output
+    return model
+
+def ResidualV2(moduleList, connect=True, kW=2, kH=2, dW=2, dH=2, name='Residual'):
+    m = Sequential(moduleList)
+    def model(x, is_training=True, reuse=None):
+    # Create model
+        with tf.variable_scope(name, values=[x]):
+            if connect:
+                output = tf.add(m(x, is_training=is_training, reuse=reuse), x)
+            else:
+                x = tf.nn.avg_pool(x, ksize=[1, kW, kH, 1], strides=[1, dW, dH, 1], padding='SAME')
                 output = m(x, is_training=is_training, reuse=reuse)
             return output
     return model
