@@ -299,9 +299,10 @@ def train(model, dataset, optimizer,
     __count_params(tf.trainable_variables(), tf.get_collection(tf.GraphKeys.ACTIVATIONS))
 
     if FLAGS.ckpt_file != '':
-        ckpt_file_name = os.path.join(checkpoint_dir, '..', FLAGS.ckpt_file)
+        ckpt_file_name = os.path.join(checkpoint_dir, FLAGS.ckpt_file)
         saver.restore(sess, ckpt_file_name)
-        sess.run(tf.assign(global_step,0))
+        if ckpt_file_name.find('..') != -1:
+           sess.run(tf.assign(global_step,0))
 
     while epoch != num_epochs:
         epoch += 1
