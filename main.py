@@ -298,7 +298,8 @@ def train(model, dataset, optimizer,
     summary_writer = tf.summary.FileWriter(log_dir, graph=sess.graph)
     epoch = FLAGS.ckpt_epoch
 
-    __count_params(tf.trainable_variables(), tf.get_collection(tf.GraphKeys.ACTIVATIONS))
+    if FLAGS.debug:
+      __count_params(tf.trainable_variables(), tf.get_collection(tf.GraphKeys.ACTIVATIONS))
 
     if FLAGS.ckpt_file != '':
         ckpt_file_name = os.path.join(checkpoint_dir, FLAGS.ckpt_file)
@@ -345,8 +346,9 @@ def train(model, dataset, optimizer,
 
 
 def main(argv=None):  # pylint: disable=unused-argument
-    for key, value in FLAGS.__flags.items():
-        logger.info('%s: %s' % (key, value))
+    if FLAGS.debug or FLAGS.ckpt_epoch == 0:
+        for key, value in FLAGS.__flags.items():
+            logger.info('%s: %s' % (key, value))
     m = importlib.import_module('models.' + FLAGS.model)
     train(m.model, FLAGS.dataset, FLAGS.optimizer,
           batch_size=FLAGS.batch_size,
