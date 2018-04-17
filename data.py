@@ -214,12 +214,12 @@ def __read_imagenet_scale(data_files, train=True, num_readers=32):
     # size: examples_per_shard * 16 * 1MB = 17.6GB
     if train:
       examples_queue = tf.RandomShuffleQueue(
-          capacity=examples_per_shard * 4,
+          capacity=examples_per_shard * 2,
           min_after_dequeue=examples_per_shard,
           dtypes=[tf.string])
     else:
       examples_queue = tf.FIFOQueue(
-          capacity=examples_per_shard * 4,
+          capacity=examples_per_shard,
           dtypes=[tf.string])
 
     if num_readers > 1:
@@ -272,7 +272,7 @@ class DataProvider:
             image_and_label,
             batch_size=batch_size,
             num_threads=num_threads,
-            capacity=min_queue_examples + 8 * batch_size,
+            capacity=min_queue_examples * 2,
             min_after_dequeue=min_queue_examples)
         else:
           image_processed = preprocess_evaluation(image, height=self.size[1], width=self.size[2])
@@ -281,7 +281,7 @@ class DataProvider:
             image_and_label,
             batch_size=batch_size,
             num_threads=num_threads,
-            capacity=min_queue_examples + 8 * batch_size)
+            capacity=min_queue_examples)
 
         return images, tf.reshape(label_batch, [batch_size])
 
