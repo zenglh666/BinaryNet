@@ -133,7 +133,7 @@ def SpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
         nInputPlane = x.get_shape().as_list()[3]
         with tf.variable_scope(name, values=[x], reuse=reuse):
             w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
-                            initializer=tf.variance_scaling_initializer(mode='fan_avg'),
+                            initializer=tf.truncated_normal_initializer(stddev=tf.sqrt(2/(kH*kW*nInputPlane))),
                             regularizer=regularizer)
             out = tf.nn.conv2d(x, w, strides=[1, dH, dW, 1], padding=padding)
             if bias:
