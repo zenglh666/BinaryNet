@@ -160,10 +160,7 @@ def __parse_scale_example_proto(example_serialized):
   return features['image/encoded'], label
 
 def __read_imagenet(data_files, train=True, num_readers=32):
-    if train:
-      filename_queue = tf.train.string_input_producer(data_files, shuffle=True, capacity=16)
-    else:
-      filename_queue = tf.train.string_input_producer(data_files, shuffle=False, capacity=1)
+    filename_queue = tf.train.string_input_producer(data_files, shuffle=False, capacity=32)
 
     # Approximate number of examples per shard.
     examples_per_shard = 1024
@@ -174,12 +171,12 @@ def __read_imagenet(data_files, train=True, num_readers=32):
     # size: examples_per_shard * 16 * 1MB = 17.6GB
     if train:
       examples_queue = tf.RandomShuffleQueue(
-          capacity=examples_per_shard * 4,
+          capacity=examples_per_shard * 2,
           min_after_dequeue=examples_per_shard,
           dtypes=[tf.string])
     else:
       examples_queue = tf.FIFOQueue(
-          capacity=examples_per_shard * 4,
+          capacity=examples_per_shard,
           dtypes=[tf.string])
 
     if num_readers > 1:
