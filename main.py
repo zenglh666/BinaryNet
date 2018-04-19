@@ -310,7 +310,7 @@ def train(model, dataset, optimizer,
         curr_count = 0
 
         logger.info('Started epoch %d' % epoch)
-        while curr_count < data.size[0]:
+        while curr_count < data.size[0] * len(data.size_list):
             curr_step, _, loss_val = sess.run([global_step, train_op, loss])
             curr_count += batch_size
             if curr_step % 100 == 0:
