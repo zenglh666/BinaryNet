@@ -240,7 +240,7 @@ class DataProvider:
           if FLAGS.multiple_scale:
             labels = tf.concat([tf.expand_dims(label, 0)] * len(size_list), axis=0)
           else:
-            labels = tf.concat([tf.expand_dims(label, 0)] * 2, axis=0)
+            labels = tf.expand_dims(label, 0)
           images, label_batch = tf.train.shuffle_batch(
             [images_processed, labels],
             batch_size=batch_size,
