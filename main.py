@@ -58,8 +58,6 @@ tf.app.flags.DEFINE_integer('shift_gpu', 0,
 tf.app.flags.DEFINE_boolean('debug', False,
                            """if debug.""")
 
-FLAGS.checkpoint_dir = './results/' + FLAGS.model + '_' + FLAGS.save
-FLAGS.log_dir = FLAGS.checkpoint_dir + '/log/'
 logger = logging.getLogger(__name__)
 formatter = logging.Formatter('''%(asctime)s - %(name)s'''
     ''' - %(levelname)s -: %(message)s''')
@@ -298,7 +296,7 @@ def train(model, dataset, optimizer,
     summary_writer = tf.summary.FileWriter(log_dir, graph=sess.graph)
     epoch = FLAGS.ckpt_epoch
 
-    if FLAGS.debug:
+    if if_debug:
       __count_params(tf.trainable_variables(), tf.get_collection(tf.GraphKeys.ACTIVATIONS))
 
     if FLAGS.ckpt_file != '':
@@ -346,6 +344,24 @@ def train(model, dataset, optimizer,
 
 
 def main(argv=None):  # pylint: disable=unused-argument
+    FLAGS.checkpoint_dir = './results/' + FLAGS.model + '_' + FLAGS.save
+    FLAGS.log_dir = FLAGS.checkpoint_dir + '/log/'
+
+    if not gfile.Exists(FLAGS.checkpoint_dir):
+        gfile.MakeDirs(FLAGS.checkpoint_dir)
+        logger.warning('create direction: ' + FLAGS.checkpoint_dir)
+    model_file = os.path.join('./models', FLAGS.model + '.py')
+    assert gfile.Exists(model_file), 'no model file named: ' + model_file
+    gfile.Copy(model_file, FLAGS.checkpoint_dir + '/model.py', overwrite=True)
+    if not gfile.Exists(FLAGS.log_dir):
+        gfile.MakeDirs(FLAGS.log_dir)
+        logger.warning('create direction: ' + FLAGS.log_dir)
+
+    handler = logging.FileHandler(os.path.join(FLAGS.log_dir,FLAGS.log_file), 'w')
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
     if FLAGS.debug or FLAGS.ckpt_epoch == 0:
         for key, value in FLAGS.__flags.items():
             logger.info('%s: %s' % (key, value))
@@ -364,19 +380,4 @@ def main(argv=None):  # pylint: disable=unused-argument
 
 
 if __name__ == '__main__':
-    
-    if not gfile.Exists(FLAGS.checkpoint_dir):
-        gfile.MakeDirs(FLAGS.checkpoint_dir)
-        logger.warning('create direction: ' + FLAGS.checkpoint_dir)
-    model_file = os.path.join('./models', FLAGS.model + '.py')
-    assert gfile.Exists(model_file), 'no model file named: ' + model_file
-    gfile.Copy(model_file, FLAGS.checkpoint_dir + '/model.py', overwrite=True)
-    if not gfile.Exists(FLAGS.log_dir):
-        gfile.MakeDirs(FLAGS.log_dir)
-        logger.warning('create direction: ' + FLAGS.log_dir)
-    
-    handler = logging.FileHandler(os.path.join(FLAGS.log_dir,FLAGS.log_file), 'w')
-    handler.setLevel(logging.DEBUG)
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
     tf.app.run()

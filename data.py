@@ -13,23 +13,21 @@ import glob
 import re
 import numpy as np
 
-tf.app.flags.DEFINE_string('imagenet_train_data_dir', 'F:/data/imagenet_scale256_train_tfrecord',
+tf.app.flags.DEFINE_string('imagenet_train_data_dir', 'F:/data/imagenet_long_scale256_train_tfrecord',
                            """Path to the imagenet data directory.""")
-tf.app.flags.DEFINE_string('imagenet_valid_data_dir', 'F:/data/imagenet_scale256_valid_tfrecord',
+tf.app.flags.DEFINE_string('imagenet_valid_data_dir', 'F:/data/imagenet_long_scale256_valid_tfrecord',
                            """Path to the imagenet data directory.""")
 tf.app.flags.DEFINE_string('cifar_data_dir', 'F:/data/Cifar/',
                            """Path to the cifar data directory.""")
-tf.app.flags.DEFINE_string('mean_file', '',
-                           """Path to the imagenet data directory.""")
 tf.app.flags.DEFINE_integer('resize_size', 256,
                             """Provide square images of this size.""")
 tf.app.flags.DEFINE_integer('crop_size', 224,
                             """Provide square images of this size.""")
 tf.app.flags.DEFINE_boolean('distort_color',False,
                             '''If we distort color''')
+tf.app.flags.DEFINE_boolean('multiple_scale',False,
+                            '''If we distort color''')
 FLAGS = tf.app.flags.FLAGS
-
-mean_tensor = None
 
 def __read_cifar(filenames, cifar100=False, shuffle=True):
   """Reads and parses examples from CIFAR data files.
@@ -73,6 +71,9 @@ def __read_cifar(filenames, cifar100=False, shuffle=True):
                            [depth, height, width])
   # Convert from [depth, height, width] to [height, width, depth].
   image = tf.transpose(depth_major, [1, 2, 0])
+
+  global size_list
+  size_list = [28, 32, 36, 40, 44]
 
   return tf.image.convert_image_dtype(image, dtype=tf.float32), label
 
@@ -159,7 +160,7 @@ def __parse_scale_example_proto(example_serialized):
 
   return features['image/encoded'], label
 
-def __read_imagenet(data_files, train=True, num_readers=32):
+def __read_imagenet(data_files, name, train=True, num_readers=8):
     filename_queue = tf.train.string_input_producer(data_files, shuffle=False, capacity=32)
 
     # Approximate number of examples per shard.
@@ -193,49 +194,20 @@ def __read_imagenet(data_files, train=True, num_readers=32):
       reader = tf.TFRecordReader()
       _, example_serialized = reader.read(filename_queue)
 
-    image_buffer, label_index, bbox, class_text = __parse_example_proto(example_serialized)
+    if name == 'imagenet':
+      image_buffer, label_index, bbox, class_text = __parse_example_proto(example_serialized)
+    elif name == 'imagenet_scale':
+      image_buffer, label_index = __parse_scale_example_proto(example_serialized)
+
     image = tf.image.decode_jpeg(image_buffer, channels=3)
     image = tf.image.convert_image_dtype(image, dtype=tf.float32)
-    resize_image = tf.image.resize_images(image, [FLAGS.resize_size, FLAGS.resize_size])
-    return resize_image, label_index - 1
 
-def __read_imagenet_scale(data_files, train=True, num_readers=32):
-    filename_queue = tf.train.string_input_producer(data_files, shuffle=False, capacity=32)
+    if name == 'imagenet':
+      label_index = tf.subtract(label_index, 1)
 
-    # Approximate number of examples per shard.
-    examples_per_shard = 1024
-    # Size the random shuffle queue to balance between good global
-    # mixing (more examples) and memory use (fewer examples).
-    # 1 image uses 299*299*3*4 bytes = 1MB
-    # The default input_queue_memory_factor is 16 implying a shuffling queue
-    # size: examples_per_shard * 16 * 1MB = 17.6GB
-    if train:
-      examples_queue = tf.RandomShuffleQueue(
-          capacity=examples_per_shard * 2,
-          min_after_dequeue=examples_per_shard,
-          dtypes=[tf.string])
-    else:
-      examples_queue = tf.FIFOQueue(
-          capacity=examples_per_shard,
-          dtypes=[tf.string])
+    global size_list
+    size_list = [224, 256, 288, 320, 352]
 
-    if num_readers > 1:
-      enqueue_ops = []
-      for _ in range(num_readers):
-        reader = tf.TFRecordReader()
-        _, value = reader.read(filename_queue)
-        enqueue_ops.append(examples_queue.enqueue([value]))
-
-      tf.train.queue_runner.add_queue_runner(
-          tf.train.queue_runner.QueueRunner(examples_queue, enqueue_ops))
-      example_serialized = examples_queue.dequeue()
-    else:
-      reader = tf.TFRecordReader()
-      _, example_serialized = reader.read(filename_queue)
-
-    image_buffer, label_index = __parse_scale_example_proto(example_serialized)
-    image = tf.image.decode_jpeg(image_buffer, channels=3)
-    image = tf.image.convert_image_dtype(image, dtype=tf.float32)
     return image, label_index
 
 class DataProvider:
@@ -263,19 +235,22 @@ class DataProvider:
 
         image, label = self.data
         if self.training:
-          image_processed = preprocess_training(image, height=self.size[1], width=self.size[2])
-          image_and_label = [image_processed, label]
+          images_processed = preprocess_training(image, height=self.size[1], width=self.size[2])
+          if FLAGS.multiple_scale:
+            labels = tf.concat([tf.expand_dims(label, 0)] * len(size_list), axis=0)
+          else:
+            labels = tf.concat([tf.expand_dims(label, 0)] * 2, axis=0)
           images, label_batch = tf.train.shuffle_batch(
-            image_and_label,
+            [images_processed, labels],
             batch_size=batch_size,
             num_threads=num_threads,
             capacity=min_queue_examples * 2,
+            enqueue_many=True,
             min_after_dequeue=min_queue_examples)
         else:
           image_processed = preprocess_evaluation(image, height=self.size[1], width=self.size[2])
-          image_and_label = [image_processed, label]
           images, label_batch = tf.train.batch(
-            image_and_label,
+            [image_processed, label],
             batch_size=batch_size,
             num_threads=num_threads,
             capacity=min_queue_examples)
@@ -284,58 +259,74 @@ class DataProvider:
 
 
 
-def preprocess_evaluation(img, height=None, width=None, normalize=None):
-    img_size = img.get_shape().as_list()
-    height = height or img_size[0]
-    width = width or img_size[1]
-    if mean_tensor is not None:
-      img = tf.subtract(img, mean_tensor)
+def preprocess_evaluation(img, height, width, normalize=None):
 
     preproc_image = tf.image.resize_image_with_crop_or_pad(img, height, width)
 
-    if mean_tensor is not None:
-      preproc_image = tf.multiply(preproc_image, 128.)
-    else:
-      preproc_image = tf.subtract(preproc_image, 0.5)
-      preproc_image = tf.multiply(preproc_image, 2.0)
+    preproc_image = tf.subtract(preproc_image, 0.5)
+    preproc_image = tf.multiply(preproc_image, 2.0)
 
     if normalize:
          # Subtract off the mean and divide by the variance of the pixels.
         preproc_image = tf.image.per_image_standardization(preproc_image)
     return preproc_image
 
-def preprocess_training(img, height=None, width=None, normalize=None):
-    img_size = img.get_shape().as_list()
-    height = height or img_size[0]
-    width = width or img_size[1]
+def preprocess_training(img, height, width, normalize=None):
 
     # Image processing for training the network. Note the many random
     # distortions applied to the image.
 
     # Randomly crop a [height, width] section of the image.
-    if mean_tensor is not None:
-      img = tf.subtract(img, mean_tensor)
-    distorted_image = tf.random_crop(img, [height, width, 3])
+    img_size = tf.shape(img)
+    img_size_float = tf.cast(img_size, tf.float32)
+    size_list_float_tensor = tf.convert_to_tensor(size_list, tf.float32)
+    size_list_int_tensor = tf.convert_to_tensor(size_list, tf.int32)
 
-    # Randomly flip the image horizontally.
-    distorted_image = tf.image.random_flip_left_right(distorted_image)
-
-    # Because these operations are not commutative, consider randomizing
-    # the order their operation.
-    if FLAGS.distort_color:
-      distorted_image = tf.image.random_brightness(distorted_image,max_delta=32. / 255.)
-      distorted_image = tf.image.random_contrast(distorted_image,lower=0.5, upper=1.5)
-
-    if mean_tensor is not None:
-      distorted_image = tf.multiply(distorted_image, 128.)
+    img_list = []
+    if FLAGS.multiple_scale:
+      for i in range(len(size_list)):
+        size_shape = tf.cond(img_size[0] > img_size[1], 
+          lambda: [tf.cast(img_size_float[0] / img_size_float[1] * size_list_float_tensor[i], tf.int32), 
+            size_list_int_tensor[i]],
+          lambda: [size_list_int_tensor[i], 
+            tf.cast(img_size_float[1] / img_size_float[0] * size_list_float_tensor[i], tf.int32)]
+          )
+        tf.image.resize_images(img, size_shape)
+        img_list.append(img)
     else:
+      size_shape = tf.cond(img_size[0] > img_size[1], 
+          lambda: [tf.cast(img_size_float[0] / img_size_float[1] * size_list_float_tensor[1], tf.int32), 
+            size_list_int_tensor[1]],
+          lambda: [size_list_int_tensor[1], 
+            tf.cast(img_size_float[1] / img_size_float[0] * size_list_float_tensor[1], tf.int32)]
+          )
+      tf.image.resize_images(img, size_shape)
+      img_list.append(img)
+
+    distorted_image_list = []
+    for i in range(len(img_list)):
+      img = img_list[i]
+      distorted_image = tf.random_crop(img, [height, width, 3])
+
+      # Because these operations are not commutative, consider randomizing
+      # the order their operation.
+      if FLAGS.distort_color:
+        distorted_image = tf.image.random_brightness(distorted_image,max_delta=32. / 255.)
+        distorted_image = tf.image.random_contrast(distorted_image,lower=0.5, upper=1.5)
+
       distorted_image = tf.subtract(distorted_image, 0.5)
       distorted_image = tf.multiply(distorted_image, 2.0)
 
-    if normalize:
+      if normalize:
         # Subtract off the mean and divide by the variance of the pixels.
         distorted_image = tf.image.per_image_standardization(distorted_image)
-    return distorted_image
+
+      distorted_image_flip = tf.image.random_flip_left_right(distorted_image)
+
+      #distorted_image_list.append(tf.expand_dims(distorted_image, 0))
+      distorted_image_list.append(tf.expand_dims(distorted_image_flip, 0))
+
+    return tf.concat(distorted_image_list, axis=0)
 
 def group_batch_images(x):
     sz = x.get_shape().as_list()
@@ -348,40 +339,19 @@ def group_batch_images(x):
 
 
 def get_data_provider(name, training=True):
-    global mean_tensor
-    if name == 'imagenet':
-        if FLAGS.mean_file != '':
-            mean_array = np.transpose(tf.divide(np.load(FLAGS.mean_file), 256.), (2,1,0))
-            mean_tensor = tf.convert_to_tensor(mean_array, tf.float32)
+    if name == 'imagenet' or name =='imagenet_scale':
         if training:
             tf_record_pattern = os.path.join(FLAGS.imagenet_train_data_dir, '%s-*' % 'train')
             data_files = tf.gfile.Glob(tf_record_pattern)
             assert data_files, 'No files found for dataset %s/%s at %s'%(
                                self.name, 'train', FLAGS.imagenet_train_data_dir)
-            return DataProvider(__read_imagenet(data_files), [1281167, FLAGS.crop_size, FLAGS.crop_size, 3], True)
+            return DataProvider(__read_imagenet(data_files, name), [1281167, FLAGS.crop_size, FLAGS.crop_size, 3], True)
         else:
             tf_record_pattern = os.path.join(FLAGS.imagenet_valid_data_dir, '%s-*' % 'validation')
             data_files = tf.gfile.Glob(tf_record_pattern)
             assert data_files, 'No files found for dataset %s/%s at %s' %(
                                self.name, 'validation', FLAGS.imagenet_valid_data_dir)
-            return DataProvider(__read_imagenet(data_files), [50000, FLAGS.crop_size, FLAGS.crop_size, 3], True)
-
-    if name == 'imagenet_scale':
-        if FLAGS.mean_file != '':
-            mean_array = np.transpose(tf.divide(np.load(FLAGS.mean_file), 256.), (2,1,0))
-            mean_tensor = tf.convert_to_tensor(mean_array, tf.float32)
-        if training:
-            tf_record_pattern = os.path.join(FLAGS.imagenet_train_data_dir, '%s-*' % 'train')
-            data_files = tf.gfile.Glob(tf_record_pattern)
-            assert data_files, 'No files found for dataset %s/%s at %s'%(
-                               self.name, 'train', FLAGS.imagenet_train_data_dir)
-            return DataProvider(__read_imagenet_scale(data_files), [1281167, FLAGS.crop_size, FLAGS.crop_size, 3], True)
-        else:
-            tf_record_pattern = os.path.join(FLAGS.imagenet_valid_data_dir, '%s-*' % 'validation')
-            data_files = tf.gfile.Glob(tf_record_pattern)
-            assert data_files, 'No files found for dataset %s/%s at %s' %(
-                               self.name, 'validation', FLAGS.imagenet_valid_data_dir)
-            return DataProvider(__read_imagenet_scale(data_files), [50000, FLAGS.crop_size, FLAGS.crop_size, 3], True)
+            return DataProvider(__read_imagenet(data_files, name), [50000, FLAGS.crop_size, FLAGS.crop_size, 3], True)
 
     elif name == 'cifar10':
         path = os.path.join(FLAGS.cifar_data_dir,'cifar10')
