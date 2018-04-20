@@ -292,7 +292,6 @@ def train(model, dataset, optimizer,
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
-    num_batches = data.size[0] / batch_size
     summary_writer = tf.summary.FileWriter(log_dir, graph=sess.graph)
     epoch = FLAGS.ckpt_epoch
 
