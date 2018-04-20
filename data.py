@@ -215,7 +215,10 @@ class DataProvider:
         self.size = size or [None]*4
         self.data = data
         self.training = training
-        self.size_list = size_list.copy()
+        if FLAGS.multiple_scale:
+          self.size_list = size_list.copy()
+        else:
+          self.size_list = [size_list[1]]
 
     def generate_batches(self, batch_size, min_queue_examples=1024, num_threads=4):
         """Construct a queued batch of images and labels.
