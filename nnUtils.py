@@ -325,8 +325,27 @@ def ResidualV2(moduleList, connect=True, kW=2, kH=2, dW=2, dH=2, name='Residual'
             else:
                 output = m(x, is_training=is_training, reuse=reuse)
                 x = tf.nn.avg_pool(x, ksize=[1, kW, kH, 1], strides=[1, dW, dH, 1], padding='SAME')
-                zero = tf.zeros(x.get_shape())
-                x = tf.concat([x,zero], axis=-1)
+                zero_shape = x.get_shape().as_list()
+                zero_shape[-1] = output.get_shape().as_list()[-1] - zero_shape[-1]
+                zero = tf.zeros(zero_shape)
+                x = tf.concat([x, zero] , axis=-1)
                 output = tf.add(output, x)
             return output
+    return model
+
+def ResidualV3(moduleList, connect=True, mapfunc=None, name='Residual'):
+    m = Sequential(moduleList)
+    def model(x, is_training=True, reuse=None):
+    # Create model
+        with tf.variable_scope(name, values=[x]):
+            if connect:
+                output = tf.add(m(x, is_training=is_training, reuse=reuse), x)
+            elif mapfunc is not None:
+                output = m(x, is_training=is_training, reuse=reuse)
+                x_proj = mapfunc(x, is_training=is_training, reuse=reuse)
+                output = tf.add(output, x_proj)
+            else:
+                output = m(x, is_training=is_training, reuse=reuse)
+            return output
+
     return model
