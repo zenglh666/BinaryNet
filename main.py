@@ -161,7 +161,7 @@ def train(model, dataset, optimizer,
     
     data = get_data_provider(dataset, training=True)
 
-    num_image_per_epoch = data.size[0]
+    num_image_per_epoch = data.size[0] * len(data.size_list)
     if decay_epochs > 0:
         decay_step = (num_image_per_epoch // batch_size) * decay_epochs
     else:
