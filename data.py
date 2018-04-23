@@ -315,11 +315,29 @@ def preprocess_training(img, height, width, normalize=None):
       # Because these operations are not commutative, consider randomizing
       # the order their operation.
       if FLAGS.distort_color:
-        distorted_image = tf.image.random_brightness(distorted_image,max_delta=32. / 255.)
-        distorted_image = tf.image.random_contrast(distorted_image,lower=0.5, upper=1.5)
+        distorted_image = tf.image.random_brightness(distorted_image,max_delta=0.4)
+        distorted_image = tf.image.random_contrast(distorted_image,lower=0.6, upper=1.6)
+        distorted_image = tf.image.random_saturation(distorted_image,lower=0.6, upper=1.6)
 
-      distorted_image = tf.subtract(distorted_image, 0.5)
-      distorted_image = tf.multiply(distorted_image, 2.0)
+        mean = [ 0.485, 0.456, 0.406 ]
+        std = [ 0.229, 0.224, 0.225 ]
+        eigval = [ 0.2175, 0.0188, 0.0045 ]
+        eigvec = [[ -0.5675,  0.7192,  0.4009 ], [-0.5808, -0.0045, -0.8140 ], [ -0.5836, -0.6948,  0.4203 ]]
+
+        mean_tensor = tf.expand_dims(tf.expand_dims(tf.convert_to_tensor(mean, tf.float32), 0), 0)
+        std_tensor = tf.expand_dims(tf.expand_dims(tf.convert_to_tensor(std, tf.float32), 0), 0)
+        eigval_tensor = tf.expand_dims(tf.convert_to_tensor(eigval, tf.float32), 0)
+        eigvec_tensor = tf.convert_to_tensor(eigvec, tf.float32)
+        alpha = tf.random_normal([1,3], stddev=0.1)
+
+        rgb = tf.reduce_sum(tf.multiply(tf.multiply(eigvec_tensor, eigval_tensor), alpha), axis=1)
+        rgb = tf.expand_dims(tf.expand_dims(rgb, axis=0), axis=0)
+        distorted_image = tf.add(distorted_image, rgb)
+
+        distorted_image = tf.divide(tf.subtract(distorted_image, mean_tensor), std_tensor)
+      else:
+        distorted_image = tf.subtract(distorted_image, 0.5)
+        distorted_image = tf.multiply(distorted_image, 2.0)
 
       if normalize:
         # Subtract off the mean and divide by the variance of the pixels.
