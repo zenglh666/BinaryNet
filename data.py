@@ -267,8 +267,16 @@ def preprocess_evaluation(img, height, width, normalize=None):
 
     preproc_image = tf.image.resize_image_with_crop_or_pad(img, height, width)
 
-    preproc_image = tf.subtract(preproc_image, 0.5)
-    preproc_image = tf.multiply(preproc_image, 2.0)
+    if FLAGS.distort_color:
+      mean = [ 0.485, 0.456, 0.406 ]
+      std = [ 0.229, 0.224, 0.225 ]
+
+      mean_tensor = tf.expand_dims(tf.expand_dims(tf.convert_to_tensor(mean, tf.float32), 0), 0)
+      std_tensor = tf.expand_dims(tf.expand_dims(tf.convert_to_tensor(std, tf.float32), 0), 0)
+      preproc_image = tf.divide(tf.subtract(preproc_image, mean_tensor), std_tensor)
+    else:
+      preproc_image = tf.subtract(preproc_image, 0.5)
+      preproc_image = tf.multiply(preproc_image, 2.0)
 
     if normalize:
          # Subtract off the mean and divide by the variance of the pixels.
