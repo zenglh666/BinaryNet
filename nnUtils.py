@@ -28,7 +28,7 @@ def binarize(x):
             return tf.sign(x)
 
 def BinarizedSpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
-        padding='VALID', bias=True, name='BinarizedSpatialConvolution'):
+        padding='VALID', bias=False, name='BinarizedSpatialConvolution'):
     def b_conv2d(x, is_training=True, reuse=None):
         nInputPlane = x.get_shape().as_list()[3]
         with tf.variable_scope(name, values=[x], reuse=reuse):
@@ -49,7 +49,7 @@ def BinarizedSpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
     return b_conv2d
 
 def BinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
-        padding='VALID', bias=True, name='BinarizedWeightOnlySpatialConvolution'):
+        padding='VALID', bias=False, name='BinarizedWeightOnlySpatialConvolution'):
     '''
     This function is used only at the first layer of the model as we dont want to binarized the RGB images
     '''
@@ -67,7 +67,7 @@ def BinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
     return bc_conv2d
 
 def AccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
-        padding='VALID', bias=True, name='BinarizedWeightOnlySpatialConvolution'):
+        padding='VALID', bias=False, name='BinarizedWeightOnlySpatialConvolution'):
     '''
     This function is used only at the first layer of the model as we dont want to binarized the RGB images
     '''
@@ -93,7 +93,7 @@ def AccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH
     return bc_conv2d
 
 def MoreAccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
-        padding='VALID', bias=True, name='BinarizedWeightOnlySpatialConvolution'):
+        padding='VALID', bias=False, name='BinarizedWeightOnlySpatialConvolution'):
     '''
     This function is used only at the first layer of the model as we dont want to binarized the RGB images
     '''
@@ -128,7 +128,7 @@ def MoreAccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1
     return bc_conv2d
 
 def SpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
-        padding='VALID', bias=True, name='SpatialConvolution'):
+        padding='VALID', bias=False, name='SpatialConvolution'):
     def conv2d(x, is_training=True, reuse=None):
         nInputPlane = x.get_shape().as_list()[3]
         with tf.variable_scope(name, values=[x], reuse=reuse):
@@ -142,7 +142,7 @@ def SpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
             return out
     return conv2d
 
-def Affine(nOutputPlane, bias=True, name=None):
+def Affine(nOutputPlane, bias=False, name=None):
     def affineLayer(x, is_training=True, reuse=None):
         with tf.variable_scope(name, 'Affine', values=[x], reuse=reuse):
             reshaped = tf.reshape(x, [x.get_shape().as_list()[0], -1])
@@ -157,7 +157,7 @@ def Affine(nOutputPlane, bias=True, name=None):
         return output
     return affineLayer
 
-def BinarizedAffine(nOutputPlane, bias=True, name=None):
+def BinarizedAffine(nOutputPlane, bias=False, name=None):
     def b_affineLayer(x, is_training=True, reuse=None):
         with tf.variable_scope(name, 'Affine', values=[x], reuse=reuse):
             '''
@@ -177,7 +177,7 @@ def BinarizedAffine(nOutputPlane, bias=True, name=None):
         return output
     return b_affineLayer
 
-def BinarizedWeightOnlyAffine(nOutputPlane, bias=True, name=None):
+def BinarizedWeightOnlyAffine(nOutputPlane, bias=False, name=None):
     def bwo_affineLayer(x, is_training=True, reuse=None):
         with tf.variable_scope(name, 'Affine', values=[x], reuse=reuse):
             '''
@@ -343,6 +343,8 @@ def ResidualV3(moduleList, connect=True, mapfunc=None, name='Residual'):
             elif mapfunc is not None:
                 output = m(x, is_training=is_training, reuse=reuse)
                 x_proj = mapfunc(x, is_training=is_training, reuse=reuse)
+                batch_norm = BatchNormalization(name='rbatch_proj')
+                x_proj = batch_norm(x_proj, is_training=is_training, reuse=reuse)
                 output = tf.add(output, x_proj)
             else:
                 output = m(x, is_training=is_training, reuse=reuse)

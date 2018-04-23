@@ -53,6 +53,7 @@ def evaluate(model, dataset,
                         total_loss = tf.add(cross_entropy_loss, regularizer_loss,
                             name='total_losses')
                         tf.add_to_collection('total_losses', total_loss)
+                        reuse = True
                 accuracy_top1 = tf.reduce_mean(
                     tf.cast(tf.nn.in_top_k(y, yt_splits[i], 1), tf.float32),
                     name='accuracies_top1')

@@ -57,6 +57,8 @@ tf.app.flags.DEFINE_integer('shift_gpu', 0,
                                """number of gpus to use.If 0 then cpu""")
 tf.app.flags.DEFINE_boolean('debug', False,
                            """if debug.""")
+tf.app.flags.DEFINE_string('weights_initial_file', '',
+                           """if weights_initial.""")
 
 logger = logging.getLogger(__name__)
 formatter = logging.Formatter('''%(asctime)s - %(name)s'''
@@ -297,6 +299,31 @@ def train(model, dataset, optimizer,
 
     if if_debug:
       __count_params(tf.trainable_variables(), tf.get_collection(tf.GraphKeys.ACTIVATIONS))
+
+    if FLAGS.weights_initial_file != '' and FLAGS.model == 'resnet18v3':
+        assign_list = []
+        trainable_variables = tf.trainable_variables()
+        weights = np.load(FLAGS.weights_initial_file)['arr_0']
+        for i in range(len(trainable_variables)):
+            if trainable_variables[i].name.find('batch') != -1:
+                weight = weights[i]
+            elif trainable_variables[i].name.find('conv') != -1:
+                weight = np.transpose(weights[i], (2, 3, 1, 0))
+            elif trainable_variables[i].name.find('fc') != -1:
+                weight = np.transpose(weights[i], (1, 0))
+            assign_list.append(tf.assign(trainable_variables[i], weight))
+        sess.run(assign_list)
+        saver.save(sess, save_path=checkpoint_dir +
+                   '/model.ckpt', global_step=global_step)
+        test_acc1, test_acc5, test_loss = evaluate(model, dataset,
+                                                   batch_size=batch_size//2,
+                                                   if_debug=if_debug,
+                                                   checkpoint_dir=checkpoint_dir,
+                                                   num_gpu=num_gpu)  # ,
+          # log_dir=log_dir)
+        logger.info('Test Accuracy Top-1: %.3f' % test_acc1)
+        logger.info('Test Accuracy Top-5: %.3f' % test_acc5)
+        logger.info('Test Loss: %.3f' % test_loss)
 
     if FLAGS.ckpt_file != '':
         ckpt_file_name = os.path.join(checkpoint_dir, FLAGS.ckpt_file)
