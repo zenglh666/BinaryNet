@@ -273,6 +273,7 @@ def preprocess_evaluation(img, height, width, normalize=None):
 
       mean_tensor = tf.expand_dims(tf.expand_dims(tf.convert_to_tensor(mean, tf.float32), 0), 0)
       std_tensor = tf.expand_dims(tf.expand_dims(tf.convert_to_tensor(std, tf.float32), 0), 0)
+
       preproc_image = tf.divide(tf.subtract(preproc_image, mean_tensor), std_tensor)
     else:
       preproc_image = tf.subtract(preproc_image, 0.5)
@@ -381,7 +382,7 @@ def get_data_provider(name, training=True):
             data_files = tf.gfile.Glob(tf_record_pattern)
             assert data_files, 'No files found for dataset %s/%s at %s' %(
                                self.name, 'validation', FLAGS.imagenet_valid_data_dir)
-            return DataProvider(__read_imagenet(data_files, name), [50000, FLAGS.crop_size, FLAGS.crop_size, 3], True)
+            return DataProvider(__read_imagenet(data_files, name), [50000, FLAGS.crop_size, FLAGS.crop_size, 3], False)
 
     elif name == 'cifar10':
         path = os.path.join(FLAGS.cifar_data_dir,'cifar10')
