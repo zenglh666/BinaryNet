@@ -172,7 +172,7 @@ def __read_imagenet(data_files, name, train=True, num_readers=8):
     # size: examples_per_shard * 16 * 1MB = 17.6GB
     if train:
       examples_queue = tf.RandomShuffleQueue(
-          capacity=examples_per_shard * 2,
+          capacity=examples_per_shard * 4,
           min_after_dequeue=examples_per_shard,
           dtypes=[tf.string])
     else:
@@ -220,7 +220,7 @@ class DataProvider:
         else:
           self.size_list = [size_list[1]]
 
-    def generate_batches(self, batch_size, min_queue_examples=1024, num_threads=4):
+    def generate_batches(self, batch_size, min_queue_examples=1024, num_threads=8):
         """Construct a queued batch of images and labels.
 
         Args:
