@@ -108,7 +108,7 @@ def MoreAccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1
                 w = tf.clip_by_value(w,-1,1)
 
             w_pow = tf.pow(tf.abs(w),FLAGS.zeta)
-            w_pow_mean = tf.reduce_mean(w_pow, axis=[0,1,2], keep_dims=True)
+            w_pow_sum = tf.reduce_sum(w_pow, axis=[0,1,2], keep_dims=True)
             w_res = tf.identity(w)
             w_apr = tf.zeros(w.get_shape())
             for i in range(FLAGS.bit):
@@ -116,7 +116,7 @@ def MoreAccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1
                 if FLAGS.zeta < 0.1:
                     alpha = tf.reduce_mean(tf.abs(w_res), axis=[0,1,2], keep_dims=True)
                 else:
-                    alpha = tf.div(tf.reduce_mean(tf.multiply(w_pow, tf.abs(w_res)), axis=[0,1,2], keep_dims=True), w_pow_mean)
+                    alpha = tf.div(tf.reduce_mean(tf.multiply(w_pow, tf.abs(w_res)), axis=[0,1,2], keep_dims=True), w_pow_sum)
                 w_mul = tf.multiply(bin_w, alpha)
                 w_apr = tf.add(w_apr, w_mul)
                 w_res = tf.subtract(w_res, w_mul)
