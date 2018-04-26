@@ -135,6 +135,8 @@ def SpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
             w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
                             initializer=tf.truncated_normal_initializer(stddev=tf.sqrt(2/(kH*kW*nInputPlane))),
                             regularizer=regularizer)
+            if FLAGS.weight_norm:
+                w = tf.layers.batch_normalization(w, axis=2, training=is_training, trainable=False, reuse=reuse, epsilon=1e-20)
             out = tf.nn.conv2d(x, w, strides=[1, dH, dW, 1], padding=padding)
             if bias:
                 b = tf.get_variable('bias', [nOutputPlane],initializer=tf.zeros_initializer)
