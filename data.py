@@ -302,7 +302,7 @@ def preprocess_training(img, height, width, normalize=None):
 
     img_list = []
     if FLAGS.multiple_scale:
-      size_index = tf.random_uniform([1], maxval=len(size_list), dtype=tf.int32)
+      size_index = tf.random_uniform([1], maxval=len(size_list), dtype=tf.int32)[0]
       resize_size_float = size_list_float_tensor[size_index]
       resize_size_int = size_list_int_tensor[size_index]
     else:
