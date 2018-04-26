@@ -163,15 +163,15 @@ def train(model, dataset, optimizer,
     
     data = get_data_provider(dataset, training=True)
 
-    num_image_per_epoch = data.size[0] * len(data.size_list)
+    num_image_per_epoch = data.size[0]
     if decay_epochs > 0:
         decay_step = (num_image_per_epoch // batch_size) * decay_epochs
     else:
         decay_step = 1e10
-    with tf.device('/cpu:0'):
-        with tf.name_scope('data'):
-            x, yt = data.generate_batches(batch_size)
+    with tf.name_scope('data'):
+        x, yt = data.generate_batches(batch_size)
 
+    with tf.device('/cpu:0'):
         global_step =  tf.train.get_or_create_global_step()
 
         if optimizer == 'SGD':
@@ -282,7 +282,7 @@ def train(model, dataset, optimizer,
     sess = tf.Session(
         config=tf.ConfigProto(
             log_device_placement=False,
-            allow_soft_placement=True,
+            allow_soft_placement=False,
             gpu_options=tf.GPUOptions(allow_growth=True),
         )
     )
@@ -335,7 +335,7 @@ def train(model, dataset, optimizer,
         curr_count = 0
 
         logger.info('Started epoch %d' % epoch)
-        while curr_count < data.size[0] * len(data.size_list):
+        while curr_count < data.size[0]:
             curr_step, _, loss_val = sess.run([global_step, train_op, loss])
             curr_count += batch_size
             if curr_step % 100 == 0:

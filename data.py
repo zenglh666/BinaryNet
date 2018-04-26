@@ -205,8 +205,12 @@ def __read_imagenet(data_files, name, train=True, num_readers=8):
     if name == 'imagenet':
       label_index = tf.subtract(label_index, 1)
 
-    global size_list
+    global size_list, mean, std, eigval, eigvec
     size_list = [224, 256, 288, 320, 352]
+    mean = [ 0.485, 0.456, 0.406 ]
+    std = [ 0.229, 0.224, 0.225 ]
+    eigval = [ 0.2175, 0.0188, 0.0045 ]
+    eigvec = [[ -0.5675,  0.7192,  0.4009 ], [-0.5808, -0.0045, -0.8140 ], [ -0.5836, -0.6948,  0.4203 ]]
 
     return image, label_index
 
@@ -215,10 +219,6 @@ class DataProvider:
         self.size = size or [None]*4
         self.data = data
         self.training = training
-        if FLAGS.multiple_scale:
-          self.size_list = size_list.copy()
-        else:
-          self.size_list = [size_list[1]]
 
     def generate_batches(self, batch_size, min_queue_examples=1024, num_threads=4):
         """Construct a queued batch of images and labels.
@@ -239,18 +239,28 @@ class DataProvider:
 
         image, label = self.data
         if self.training:
-          images_processed = preprocess_training(image, height=self.size[1], width=self.size[2])
-          if FLAGS.multiple_scale:
-            labels = tf.concat([tf.expand_dims(label, 0)] * len(size_list), axis=0)
-          else:
-            labels = tf.expand_dims(label, 0)
+          image_processed = preprocess_training(image, height=self.size[1], width=self.size[2])
           images, label_batch = tf.train.shuffle_batch(
-            [images_processed, labels],
+            [image_processed, label],
             batch_size=batch_size,
             num_threads=num_threads,
             capacity=min_queue_examples * 4,
-            enqueue_many=True,
             min_after_dequeue=min_queue_examples)
+          with tf.device('/gpu:0'):
+            if FLAGS.distort_color:
+              mean_tensor = tf.reshape(tf.convert_to_tensor(mean, tf.float32), [1, 1, 1, 3])
+              std_tensor = tf.reshape(tf.convert_to_tensor(std, tf.float32), [1, 1, 1, 3])
+              eigval_tensor = tf.reshape(tf.convert_to_tensor(eigval, tf.float32), [1, 1, 1, 3])
+              eigvec_tensor = tf.reshape(tf.convert_to_tensor(eigvec, tf.float32), [1, 1, 3, 3])
+              alpha = tf.random_normal([batch_size, 1, 1, 3], stddev=0.1)
+              rgb = tf.reduce_sum(tf.multiply(tf.multiply(eigvec_tensor, eigval_tensor), alpha), axis=3)
+              rgb = tf.reshape(rgb, [batch_size, 1, 1, 3])
+
+              images = tf.add(images, rgb)
+              images = tf.divide(tf.subtract(images, mean_tensor), std_tensor)
+            else:
+              images = tf.subtract(images, 0.5)
+              images = tf.multiply(images, 2.0)
         else:
           image_processed = preprocess_evaluation(image, height=self.size[1], width=self.size[2])
           images, label_batch = tf.train.batch(
@@ -258,7 +268,15 @@ class DataProvider:
             batch_size=batch_size,
             num_threads=num_threads,
             capacity=min_queue_examples)
+          with tf.device('/gpu:0'):
+            if FLAGS.distort_color:
+              mean_tensor = tf.reshape(tf.convert_to_tensor(mean, tf.float32), [1, 1, 1, 3])
+              std_tensor = tf.reshape(tf.convert_to_tensor(std, tf.float32), [1, 1, 1, 3])
 
+              preproc_image = tf.divide(tf.subtract(preproc_image, mean_tensor), std_tensor)
+            else:
+              preproc_image = tf.subtract(preproc_image, 0.5)
+              preproc_image = tf.multiply(preproc_image, 2.0)
         return images, tf.reshape(label_batch, [batch_size])
 
 
@@ -266,19 +284,6 @@ class DataProvider:
 def preprocess_evaluation(img, height, width, normalize=None):
 
     preproc_image = tf.image.resize_image_with_crop_or_pad(img, height, width)
-
-    if FLAGS.distort_color:
-      mean = [ 0.485, 0.456, 0.406 ]
-      std = [ 0.229, 0.224, 0.225 ]
-
-      mean_tensor = tf.expand_dims(tf.expand_dims(tf.convert_to_tensor(mean, tf.float32), 0), 0)
-      std_tensor = tf.expand_dims(tf.expand_dims(tf.convert_to_tensor(std, tf.float32), 0), 0)
-
-      preproc_image = tf.divide(tf.subtract(preproc_image, mean_tensor), std_tensor)
-    else:
-      preproc_image = tf.subtract(preproc_image, 0.5)
-      preproc_image = tf.multiply(preproc_image, 2.0)
-
     if normalize:
          # Subtract off the mean and divide by the variance of the pixels.
         preproc_image = tf.image.per_image_standardization(preproc_image)
@@ -297,67 +302,34 @@ def preprocess_training(img, height, width, normalize=None):
 
     img_list = []
     if FLAGS.multiple_scale:
-      for i in range(len(size_list)):
-        size_shape = tf.cond(img_size[0] > img_size[1], 
-          lambda: [tf.cast(img_size_float[0] / img_size_float[1] * size_list_float_tensor[i], tf.int32), 
-            size_list_int_tensor[i]],
-          lambda: [size_list_int_tensor[i], 
-            tf.cast(img_size_float[1] / img_size_float[0] * size_list_float_tensor[i], tf.int32)]
-          )
-        tf.image.resize_images(img, size_shape)
-        img_list.append(img)
+      size_index = tf.random_uniform([1], maxval=len(size_list), dtype=tf.int32)
+      resize_size_float = size_list_float_tensor[size_index]
+      resize_size_int = size_list_int_tensor[size_index]
     else:
-      size_shape = tf.cond(img_size[0] > img_size[1], 
-          lambda: [tf.cast(img_size_float[0] / img_size_float[1] * size_list_float_tensor[1], tf.int32), 
-            size_list_int_tensor[1]],
-          lambda: [size_list_int_tensor[1], 
-            tf.cast(img_size_float[1] / img_size_float[0] * size_list_float_tensor[1], tf.int32)]
-          )
-      tf.image.resize_images(img, size_shape)
-      img_list.append(img)
+      resize_size_float = float(FLAGS.resize_size)
+      resize_size_int = FLAGS.resize_size
+    size = tf.cond(img_size[0] > img_size[1], 
+        lambda: [tf.cast(img_size_float[0] / img_size_float[1] * resize_size_float, tf.int32), resize_size_int],
+        lambda: [resize_size_int, tf.cast(img_size_float[1] / img_size_float[0] * resize_size_float, tf.int32)]
+        )
+    img = tf.image.resize_images(img, size)
 
-    distorted_image_list = []
-    for i in range(len(img_list)):
-      img = img_list[i]
-      distorted_image = tf.random_crop(img, [height, width, 3])
+    distorted_image = tf.random_crop(img, [height, width, 3])
 
-      # Because these operations are not commutative, consider randomizing
-      # the order their operation.
-      if FLAGS.distort_color:
-        distorted_image = tf.image.random_brightness(distorted_image,max_delta=0.4)
-        distorted_image = tf.image.random_contrast(distorted_image,lower=0.6, upper=1.6)
-        distorted_image = tf.image.random_saturation(distorted_image,lower=0.6, upper=1.6)
+    #if FLAGS.distort_color:
+      #distorted_image = tf.image.random_brightness(distorted_image,max_delta=0.4)
+      #distorted_image = tf.image.random_contrast(distorted_image,lower=0.6, upper=1.6)
+      #distorted_image = tf.image.random_saturation(distorted_image,lower=0.6, upper=1.6)
 
-        mean = [ 0.485, 0.456, 0.406 ]
-        std = [ 0.229, 0.224, 0.225 ]
-        eigval = [ 0.2175, 0.0188, 0.0045 ]
-        eigvec = [[ -0.5675,  0.7192,  0.4009 ], [-0.5808, -0.0045, -0.8140 ], [ -0.5836, -0.6948,  0.4203 ]]
+    # Because these operations are not commutative, consider randomizing
+    # the order their operation.
+    if normalize:
+      # Subtract off the mean and divide by the variance of the pixels.
+      distorted_image = tf.image.per_image_standardization(distorted_image)
 
-        mean_tensor = tf.expand_dims(tf.expand_dims(tf.convert_to_tensor(mean, tf.float32), 0), 0)
-        std_tensor = tf.expand_dims(tf.expand_dims(tf.convert_to_tensor(std, tf.float32), 0), 0)
-        eigval_tensor = tf.expand_dims(tf.convert_to_tensor(eigval, tf.float32), 0)
-        eigvec_tensor = tf.convert_to_tensor(eigvec, tf.float32)
-        alpha = tf.random_normal([1,3], stddev=0.1)
+    distorted_image = tf.image.random_flip_left_right(distorted_image)
 
-        rgb = tf.reduce_sum(tf.multiply(tf.multiply(eigvec_tensor, eigval_tensor), alpha), axis=1)
-        rgb = tf.expand_dims(tf.expand_dims(rgb, axis=0), axis=0)
-        distorted_image = tf.add(distorted_image, rgb)
-
-        distorted_image = tf.divide(tf.subtract(distorted_image, mean_tensor), std_tensor)
-      else:
-        distorted_image = tf.subtract(distorted_image, 0.5)
-        distorted_image = tf.multiply(distorted_image, 2.0)
-
-      if normalize:
-        # Subtract off the mean and divide by the variance of the pixels.
-        distorted_image = tf.image.per_image_standardization(distorted_image)
-
-      distorted_image_flip = tf.image.random_flip_left_right(distorted_image)
-
-      #distorted_image_list.append(tf.expand_dims(distorted_image, 0))
-      distorted_image_list.append(tf.expand_dims(distorted_image_flip, 0))
-
-    return tf.concat(distorted_image_list, axis=0)
+    return distorted_image
 
 def group_batch_images(x):
     sz = x.get_shape().as_list()
