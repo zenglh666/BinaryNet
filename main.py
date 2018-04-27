@@ -282,7 +282,7 @@ def train(model, dataset, optimizer,
     sess = tf.Session(
         config=tf.ConfigProto(
             log_device_placement=False,
-            allow_soft_placement=False,
+            allow_soft_placement=True,
             gpu_options=tf.GPUOptions(allow_growth=True),
         )
     )
