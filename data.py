@@ -12,6 +12,7 @@ import csv
 import glob
 import re
 import numpy as np
+import pickle
 
 tf.app.flags.DEFINE_string('imagenet_train_data_dir', 'F:/data/imagenet_short_scale256_train_tfrecord',
                            """Path to the imagenet data directory.""")
@@ -29,7 +30,7 @@ tf.app.flags.DEFINE_boolean('multiple_scale',False,
                             '''If we distort color''')
 FLAGS = tf.app.flags.FLAGS
 
-def __read_cifar(filenames, cifar100=False, shuffle=True):
+def __read_cifar(filenames, train=False):
   """Reads and parses examples from CIFAR data files.
   """
   # Dimensions of the images in the CIFAR-10 dataset.
@@ -38,39 +39,40 @@ def __read_cifar(filenames, cifar100=False, shuffle=True):
   for f in filenames:
     if not tf.gfile.Exists(f):
       raise ValueError('Failed to find file: ' + f)
-  filename_queue = tf.train.string_input_producer(filenames, shuffle=shuffle)
+  if train:
+    data = []
+    labels = []
+    for file in filenames:
+      fo = open(file, 'rb')
+      entry = pickle.load(fo, encoding='bytes')
+      data.append(entry[b'data'])
+      if b'labels' in entry:
+        labels += entry[b'labels']
+      else:
+        labels += entry[b'fine_labels']
+        fo.close()
+    data = np.concatenate(data)
+    data = data.reshape((50000, 3, 32, 32))
+    data = data.transpose((0, 2, 3, 1))  # convert to HWC
+    labels = np.array(labels).reshape((50000, 1))
+  else:
+    file = filenames[0]
+    fo = open(file, 'rb')
+    entry = pickle.load(fo, encoding='bytes')
+    data = entry[b'data']
+    if b'labels' in entry:
+      labels = entry[b'labels']
+    else:
+      labels = entry[b'fine_labels']
+    fo.close()
+    data = data.reshape((10000, 3, 32, 32))
+    data = data.transpose((0, 2, 3, 1))  # convert to HWC
+    labels = np.array(labels).reshape((10000, 1))
 
-  label_bytes = 1
-  label_offset = 0
-  if cifar100:
-      label_offset = 1
-  height = 32
-  width = 32
-  depth = 3
-  image_bytes = height * width * depth
-  # Every record consists of a label followed by the image, with a
-  # fixed number of bytes for each.
-  record_bytes = label_bytes + label_offset + image_bytes
+  data_tensor = tf.convert_to_tensor(data, dtype=tf.float32)
+  labels_tensor = tf. convert_to_tensor(labels, dtype=tf.int32)
 
-  # Read a record, getting filenames from the filename_queue.  No
-  # header or footer in the CIFAR-10 format, so we leave header_bytes
-  # and footer_bytes at their default of 0.
-  reader = tf.FixedLengthRecordReader(record_bytes=record_bytes)
-  key, value = reader.read(filename_queue)
-
-  # Convert from a string to a vector of uint8 that is record_bytes long.
-  record_bytes = tf.decode_raw(value, tf.uint8)
-
-  # The first bytes represent the label, which we convert from uint8->int32.
-  label = tf.cast(
-      tf.slice(record_bytes, [label_offset], [label_bytes]), tf.int32)
-
-  # The remaining bytes after the label represent the image, which we reshape
-  # from [depth * height * width] to [depth, height, width].
-  depth_major = tf.reshape(tf.slice(record_bytes, [label_offset+label_bytes], [image_bytes]),
-                           [depth, height, width])
-  # Convert from [depth, height, width] to [height, width, depth].
-  image = tf.transpose(depth_major, [1, 2, 0])
+  image, label = tf.train.slice_input_producer([data_tensor, labels_tensor])
 
   global size_list, default_resize_size
   size_list = [28, 32, 36, 40, 44]
@@ -164,7 +166,7 @@ def __parse_scale_example_proto(example_serialized):
 
   return features['image/encoded'], label
 
-def __read_imagenet(data_files, name, train=True, num_readers=8):
+def __read_imagenet(data_files, name, train=True, num_readers=2):
     filename_queue = tf.train.string_input_producer(data_files, shuffle=False, capacity=32)
 
     # Approximate number of examples per shard.
@@ -290,6 +292,8 @@ class DataProvider:
 
 
 def preprocess_evaluation(img, height, width, normalize=None):
+    img_size = tf.shape(img)
+    img_size_float = tf.cast(img_size, tf.float32)
     resize_size_float = float(default_resize_size)
     resize_size_int = int(default_resize_size)
     size = tf.cond(img_size[0] > img_size[1], 
@@ -362,30 +366,32 @@ def get_data_provider(name, training=True):
             data_files = tf.gfile.Glob(tf_record_pattern)
             assert data_files, 'No files found for dataset %s/%s at %s'%(
                                self.name, 'train', FLAGS.imagenet_train_data_dir)
-            return DataProvider(__read_imagenet(data_files, name), [1281167, FLAGS.crop_size, FLAGS.crop_size, 3], True)
+            return DataProvider(__read_imagenet(data_files, name, train=training),
+                                [1281167, FLAGS.crop_size, FLAGS.crop_size, 3], training=training)
         else:
             tf_record_pattern = os.path.join(FLAGS.imagenet_valid_data_dir, '%s-*' % 'validation')
             data_files = tf.gfile.Glob(tf_record_pattern)
             assert data_files, 'No files found for dataset %s/%s at %s' %(
                                self.name, 'validation', FLAGS.imagenet_valid_data_dir)
-            return DataProvider(__read_imagenet(data_files, name), [50000, FLAGS.crop_size, FLAGS.crop_size, 3], False)
+            return DataProvider(__read_imagenet(data_files, name, train=training),
+                                [50000, FLAGS.crop_size, FLAGS.crop_size, 3], training=training)
 
     elif name == 'cifar10':
-        path = os.path.join(FLAGS.cifar_data_dir,'cifar10')
-        data_dir = os.path.join(path, 'cifar-10-batches-bin/')
+        path = os.path.join(FLAGS.cifar_data_dir,'cifar10-python')
+        data_dir = os.path.join(path, 'cifar-10-batches-py/')
         if training:
-            return DataProvider(__read_cifar([os.path.join(data_dir, 'data_batch_%d.bin' % i)
-                                    for i in range(1, 6)], False, True),
-                                [50000, 24,24,3], True)
+            return DataProvider(__read_cifar([os.path.join(data_dir, 'data_batch_%d' % i)
+                                    for i in range(1, 6)], train=training),
+                                [50000, 24,24,3], training=training)
         else:
-            return DataProvider(__read_cifar([os.path.join(data_dir, 'test_batch.bin')], False, False),
-                                [10000, 24,24, 3], False)
+            return DataProvider(__read_cifar([os.path.join(data_dir, 'test_batch')], train=training),
+                                [10000, 24,24, 3], training=training)
     elif name == 'cifar100':
-        path = os.path.join(FLAGS.cifar_data_dir,'cifar100')
-        data_dir = os.path.join(path, 'cifar-100-binary/')
+        path = os.path.join(FLAGS.cifar_data_dir,'cifar100-python')
+        data_dir = os.path.join(path, 'cifar-100-py/')
         if training:
-            return DataProvider(__read_cifar([os.path.join(data_dir, 'train.bin')], True, True),
-                                [50000, 24,24,3], True)
+            return DataProvider(__read_cifar([os.path.join(data_dir, 'train')], train=training),
+                                [50000, 24,24,3], training=training)
         else:
-            return DataProvider(__read_cifar([os.path.join(data_dir, 'test.bin')], True, False),
-                                [10000, 24,24, 3], False)
+            return DataProvider(__read_cifar([os.path.join(data_dir, 'test')], train=training),
+                                [10000, 24,24, 3], training=training)
