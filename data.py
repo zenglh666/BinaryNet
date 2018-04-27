@@ -19,7 +19,7 @@ tf.app.flags.DEFINE_string('imagenet_valid_data_dir', 'F:/data/imagenet_short_sc
                            """Path to the imagenet data directory.""")
 tf.app.flags.DEFINE_string('cifar_data_dir', 'F:/data/Cifar/',
                            """Path to the cifar data directory.""")
-tf.app.flags.DEFINE_integer('resize_size', 256,
+tf.app.flags.DEFINE_integer('resize_size', 0,
                             """Provide square images of this size.""")
 tf.app.flags.DEFINE_integer('crop_size', 224,
                             """Provide square images of this size.""")
@@ -72,8 +72,12 @@ def __read_cifar(filenames, cifar100=False, shuffle=True):
   # Convert from [depth, height, width] to [height, width, depth].
   image = tf.transpose(depth_major, [1, 2, 0])
 
-  global size_list
+  global size_list, default_resize_size
   size_list = [28, 32, 36, 40, 44]
+  if FLAGS.resize_size > 0:
+      default_resize_size = FLAGS.resize_size
+  else:
+      default_resize_size = 32
 
   return tf.image.convert_image_dtype(image, dtype=tf.float32), label
 
@@ -205,12 +209,16 @@ def __read_imagenet(data_files, name, train=True, num_readers=8):
     if name == 'imagenet':
       label_index = tf.subtract(label_index, 1)
 
-    global size_list, mean, std, eigval, eigvec
+    global size_list, mean, std, eigval, eigvec, default_resize_size
     size_list = [224, 256, 288, 320, 352]
     mean = [ 0.485, 0.456, 0.406 ]
     std = [ 0.229, 0.224, 0.225 ]
     eigval = [ 0.2175, 0.0188, 0.0045 ]
     eigvec = [[ -0.5675,  0.7192,  0.4009 ], [-0.5808, -0.0045, -0.8140 ], [ -0.5836, -0.6948,  0.4203 ]]
+    if FLAGS.resize_size > 0:
+      default_resize_size = FLAGS.resize_size
+    else:
+      default_resize_size = 256
 
     return image, label_index
 
@@ -282,6 +290,13 @@ class DataProvider:
 
 
 def preprocess_evaluation(img, height, width, normalize=None):
+    resize_size_float = float(default_resize_size)
+    resize_size_int = int(default_resize_size)
+    size = tf.cond(img_size[0] > img_size[1], 
+        lambda: [tf.cast(img_size_float[0] / img_size_float[1] * resize_size_float, tf.int32), resize_size_int],
+        lambda: [resize_size_int, tf.cast(img_size_float[1] / img_size_float[0] * resize_size_float, tf.int32)]
+        )
+    img = tf.image.resize_images(img, size)
 
     preproc_image = tf.image.resize_image_with_crop_or_pad(img, height, width)
     if normalize:
@@ -300,14 +315,13 @@ def preprocess_training(img, height, width, normalize=None):
     size_list_float_tensor = tf.convert_to_tensor(size_list, tf.float32)
     size_list_int_tensor = tf.convert_to_tensor(size_list, tf.int32)
 
-    img_list = []
     if FLAGS.multiple_scale:
       size_index = tf.random_uniform([1], maxval=len(size_list), dtype=tf.int32)[0]
       resize_size_float = size_list_float_tensor[size_index]
       resize_size_int = size_list_int_tensor[size_index]
     else:
-      resize_size_float = float(FLAGS.resize_size)
-      resize_size_int = FLAGS.resize_size
+      resize_size_float = float(default_resize_size)
+      resize_size_int = int(default_resize_size)
     size = tf.cond(img_size[0] > img_size[1], 
         lambda: [tf.cast(img_size_float[0] / img_size_float[1] * resize_size_float, tf.int32), resize_size_int],
         lambda: [resize_size_int, tf.cast(img_size_float[1] / img_size_float[0] * resize_size_float, tf.int32)]
