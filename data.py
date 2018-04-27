@@ -273,10 +273,10 @@ class DataProvider:
               mean_tensor = tf.reshape(tf.convert_to_tensor(mean, tf.float32), [1, 1, 1, 3])
               std_tensor = tf.reshape(tf.convert_to_tensor(std, tf.float32), [1, 1, 1, 3])
 
-              preproc_image = tf.divide(tf.subtract(preproc_image, mean_tensor), std_tensor)
+              images = tf.divide(tf.subtract(images, mean_tensor), std_tensor)
             else:
-              preproc_image = tf.subtract(preproc_image, 0.5)
-              preproc_image = tf.multiply(preproc_image, 2.0)
+              images = tf.subtract(images, 0.5)
+              images = tf.multiply(images, 2.0)
         return images, tf.reshape(label_batch, [batch_size])
 
 
