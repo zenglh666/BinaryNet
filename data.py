@@ -69,8 +69,8 @@ def __read_cifar(filenames, train=False):
     data = data.transpose((0, 2, 3, 1))  # convert to HWC
     labels = np.array(labels).reshape((10000, 1))
 
-  data_tensor = tf.convert_to_tensor(data, dtype=tf.float32)
-  labels_tensor = tf. convert_to_tensor(labels, dtype=tf.int32)
+  data_tensor = tf.constant(data, dtype=tf.float32)
+  labels_tensor = tf.constant(labels, dtype=tf.int32)
 
   image, label = tf.train.slice_input_producer([data_tensor, labels_tensor])
 
@@ -258,10 +258,10 @@ class DataProvider:
             min_after_dequeue=min_queue_examples)
           with tf.device('/gpu:0'):
             if FLAGS.distort_color:
-              mean_tensor = tf.reshape(tf.convert_to_tensor(mean, tf.float32), [1, 1, 1, 3])
-              std_tensor = tf.reshape(tf.convert_to_tensor(std, tf.float32), [1, 1, 1, 3])
-              eigval_tensor = tf.reshape(tf.convert_to_tensor(eigval, tf.float32), [1, 1, 1, 3])
-              eigvec_tensor = tf.reshape(tf.convert_to_tensor(eigvec, tf.float32), [1, 1, 3, 3])
+              mean_tensor = tf.reshape(tf.constant(mean, tf.float32), [1, 1, 1, 3])
+              std_tensor = tf.reshape(tf.constant(std, tf.float32), [1, 1, 1, 3])
+              eigval_tensor = tf.reshape(tf.constant(eigval, tf.float32), [1, 1, 1, 3])
+              eigvec_tensor = tf.reshape(tf.constant(eigvec, tf.float32), [1, 1, 3, 3])
               alpha = tf.random_normal([batch_size, 1, 1, 3], stddev=0.1)
               rgb = tf.reduce_sum(tf.multiply(tf.multiply(eigvec_tensor, eigval_tensor), alpha), axis=3)
               rgb = tf.reshape(rgb, [batch_size, 1, 1, 3])
@@ -280,8 +280,8 @@ class DataProvider:
             capacity=min_queue_examples)
           with tf.device('/gpu:0'):
             if FLAGS.distort_color:
-              mean_tensor = tf.reshape(tf.convert_to_tensor(mean, tf.float32), [1, 1, 1, 3])
-              std_tensor = tf.reshape(tf.convert_to_tensor(std, tf.float32), [1, 1, 1, 3])
+              mean_tensor = tf.reshape(tf.constant(mean, tf.float32), [1, 1, 1, 3])
+              std_tensor = tf.reshape(tf.constant(std, tf.float32), [1, 1, 1, 3])
 
               images = tf.divide(tf.subtract(images, mean_tensor), std_tensor)
             else:
@@ -316,8 +316,8 @@ def preprocess_training(img, height, width, normalize=None):
     # Randomly crop a [height, width] section of the image.
     img_size = tf.shape(img)
     img_size_float = tf.cast(img_size, tf.float32)
-    size_list_float_tensor = tf.convert_to_tensor(size_list, tf.float32)
-    size_list_int_tensor = tf.convert_to_tensor(size_list, tf.int32)
+    size_list_float_tensor = tf.constant(size_list, tf.float32)
+    size_list_int_tensor = tf.constant(size_list, tf.int32)
 
     if FLAGS.multiple_scale:
       size_index = tf.random_uniform([1], maxval=len(size_list), dtype=tf.int32)[0]
