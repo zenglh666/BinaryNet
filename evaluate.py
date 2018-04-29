@@ -124,6 +124,8 @@ def evaluate(model, dataset,
 
         coord.request_stop()
         coord.join(threads)
+        coord.clear_stop()
+        sess.close()
         return total_acc1, total_acc5, total_loss
 
 def main(argv=None):  # pylint: disable=unused-argument
