@@ -286,7 +286,7 @@ def train(model, dataset, optimizer,
             gpu_options=tf.GPUOptions(allow_growth=True),
         )
     )
-    saver = tf.train.Saver(max_to_keep=5)
+    saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=5)
 
     sess.run(tf.global_variables_initializer())
 
@@ -365,6 +365,7 @@ def train(model, dataset, optimizer,
     coord.request_stop()
     coord.join(threads)
     coord.clear_stop()
+    sess.close()
     summary_writer.close()
 
 
