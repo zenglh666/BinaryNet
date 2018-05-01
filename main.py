@@ -28,6 +28,8 @@ tf.app.flags.DEFINE_integer('decay_epochs', 10,
                             """Iterations after which learning rate decays.""")
 tf.app.flags.DEFINE_integer('test_epochs', 1,
                             """Iterations after which test.""")
+tf.app.flags.DEFINE_integer('decay_plan', 0,
+                            """the plan to decay laearning rate.""")
 tf.app.flags.DEFINE_float('grad_clip_norm', 1e1,
                           """Initial learning rate.""")
 tf.app.flags.DEFINE_float('momentum', 0.9,
@@ -173,21 +175,26 @@ def train(model, dataset, optimizer,
 
     with tf.device('/cpu:0'):
         global_step =  tf.train.get_or_create_global_step()
-
-        if optimizer == 'SGD':
+        if FLAGS.decay_plan == 0:
             lr = tf.train.exponential_decay(
                 initial_learning_rate, global_step, decay_step,
                 learning_rate_decay_factor, staircase=True)
-            opt = tf.train.GradientDescentOptimizer(lr)
-        elif optimizer == 'MOM':
-            lr = tf.train.exponential_decay(
-                initial_learning_rate, global_step, decay_step,
-                learning_rate_decay_factor, staircase=True)
-            opt = tf.train.MomentumOptimizer(lr, FLAGS.momentum)
-        elif optimizer == 'ADA':
+        elif FLAGS.decay_plan == 1:
             lr = tf.train.exponential_decay(
                 initial_learning_rate, global_step, decay_step,
                 learning_rate_decay_factor, staircase=False)
+        elif FLAGS.decay_plan == 2:
+            lr = tf.train.piecewise_constant(
+                global_step,
+                [decay_step, decay_step//2],
+                [initial_learning_rate, initial_learning_rate/10, initial_learning_rate/100])
+
+        if optimizer == 'SGD':
+            
+            opt = tf.train.GradientDescentOptimizer(lr)
+        elif optimizer == 'MOM':
+            opt = tf.train.MomentumOptimizer(lr, FLAGS.momentum)
+        elif optimizer == 'ADA':
             opt = tf.train.AdamOptimizer(lr)
         else:
             opt = None
