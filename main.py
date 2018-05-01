@@ -286,7 +286,7 @@ def train(model, dataset, optimizer,
             gpu_options=tf.GPUOptions(allow_growth=True),
         )
     )
-    saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=5)
+    saver = tf.train.Saver(max_to_keep=5)
 
     sess.run(tf.global_variables_initializer())
 
@@ -326,7 +326,11 @@ def train(model, dataset, optimizer,
 
     if FLAGS.ckpt_file != '':
         ckpt_file_name = os.path.join(checkpoint_dir, FLAGS.ckpt_file)
-        saver.restore(sess, ckpt_file_name)
+        if epoch == 0:
+            saver_init = tf.train.Saver(tf.trainable_variables())
+            saver_init.restore(sess, ckpt_file_name)
+        else:
+            saver.restore(sess, ckpt_file_name)
         if ckpt_file_name.find('..') != -1:
            sess.run(tf.assign(global_step,0))
 
