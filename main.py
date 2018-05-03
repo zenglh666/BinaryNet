@@ -167,7 +167,7 @@ def train(model, dataset, optimizer,
 
     num_image_per_epoch = data.size[0]
     if decay_epochs > 0:
-        decay_step = (num_image_per_epoch // batch_size) * decay_epochs
+        decay_step = tf.cast((num_image_per_epoch // batch_size) * decay_epochs, tf.int64)
     else:
         decay_step = 1e10
     with tf.name_scope('data'):
@@ -186,8 +186,9 @@ def train(model, dataset, optimizer,
         elif FLAGS.decay_plan == 2:
             lr = tf.train.piecewise_constant(
                 global_step,
-                [decay_step, decay_step//2],
-                [initial_learning_rate, initial_learning_rate/10, initial_learning_rate/100])
+                [decay_step, decay_step + decay_step//4, decay_step + decay_step//2],
+                [initial_learning_rate, initial_learning_rate/10, 
+                 initial_learning_rate/100, initial_learning_rate/1000])
 
         if optimizer == 'SGD':
             
@@ -310,9 +311,14 @@ def train(model, dataset, optimizer,
         assign_list = []
         trainable_variables = tf.trainable_variables()
         weights = np.load(FLAGS.weights_initial_file)['arr_0']
+        flag=True
         for i in range(len(trainable_variables)):
             if trainable_variables[i].name.find('batch') != -1:
-                weight = weights[i]
+                if flag:
+                    weight = weights[i+1]
+                else:
+                    weight = weights[i-1]
+                flag = not flag
             elif trainable_variables[i].name.find('conv') != -1:
                 weight = np.transpose(weights[i], (2, 3, 1, 0))
             elif trainable_variables[i].name.find('fc') != -1:
