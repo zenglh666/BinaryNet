@@ -406,7 +406,7 @@ def main(argv=None):  # pylint: disable=unused-argument
     logger.addHandler(handler)
 
     if FLAGS.debug or FLAGS.ckpt_epoch == 0:
-        for key, value in FLAGS.__flags.items():
+        for key, value in sorted(FLAGS.__flags.items()):
             logger.info('%s: %s' % (key, value))
     m = importlib.import_module('models.' + FLAGS.model)
     train(m.model, FLAGS.dataset, FLAGS.optimizer,
