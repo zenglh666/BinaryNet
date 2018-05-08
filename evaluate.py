@@ -43,7 +43,7 @@ def evaluate(model, dataset,
                     device_str = '/gpu:'+str(i)
                 with tf.device(device_str):
                     with tf.name_scope('%s_%d' % ('tower', i)) as scope:
-                        y = model(x_splits[i], is_training=True, reuse=reuse)
+                        y = model(x_splits[i], is_training=False, reuse=reuse)
                         cross_entropy_loss = tf.reduce_mean(
                             tf.nn.sparse_softmax_cross_entropy_with_logits(labels=yt_splits[i], logits=y),
                             name='cross_entropy_losses')

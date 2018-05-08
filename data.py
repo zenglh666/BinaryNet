@@ -270,21 +270,6 @@ class DataProvider:
             num_threads=num_threads,
             capacity=min_queue_examples * 4,
             min_after_dequeue=min_queue_examples)
-          with tf.device('/gpu:0'):
-            if short_scale:
-              mean_tensor = tf.reshape(tf.constant(mean, tf.float32), [1, 1, 1, 3])
-              std_tensor = tf.reshape(tf.constant(std, tf.float32), [1, 1, 1, 3])
-              #eigval_tensor = tf.reshape(tf.constant(eigval, tf.float32), [1, 1, 1, 3])
-              #eigvec_tensor = tf.reshape(tf.constant(eigvec, tf.float32), [1, 1, 3, 3])
-              #alpha = tf.random_normal([batch_size, 1, 1, 3], stddev=0.1)
-              #rgb = tf.reduce_sum(tf.multiply(tf.multiply(eigvec_tensor, eigval_tensor), alpha), axis=3)
-              #rgb = tf.reshape(rgb, [batch_size, 1, 1, 3])
-
-              #images = tf.add(images, rgb)
-              images = tf.divide(tf.subtract(images, mean_tensor), std_tensor)
-            else:
-              images = tf.subtract(images, 0.5)
-              images = tf.multiply(images, 2.0)
         else:
           image_processed = preprocess_evaluation(image, height=self.size[1], width=self.size[2])
           images, label_batch = tf.train.batch(
@@ -292,15 +277,6 @@ class DataProvider:
             batch_size=batch_size,
             num_threads=num_threads,
             capacity=min_queue_examples)
-          with tf.device('/gpu:0'):
-            if short_scale:
-              mean_tensor = tf.reshape(tf.constant(mean, tf.float32), [1, 1, 1, 3])
-              std_tensor = tf.reshape(tf.constant(std, tf.float32), [1, 1, 1, 3])
-
-              images = tf.divide(tf.subtract(images, mean_tensor), std_tensor)
-            else:
-              images = tf.subtract(images, 0.5)
-              images = tf.multiply(images, 2.0)
         return images, tf.reshape(label_batch, [batch_size])
 
 
@@ -324,6 +300,15 @@ def preprocess_evaluation(img, height, width, normalize=None):
     if normalize:
          # Subtract off the mean and divide by the variance of the pixels.
         preproc_image = tf.image.per_image_standardization(preproc_image)
+
+    if short_scale:
+      mean_tensor = tf.reshape(tf.constant(mean, tf.float32), [1, 1, 3])
+      std_tensor = tf.reshape(tf.constant(std, tf.float32), [1, 1, 3])
+      preproc_image = tf.divide(tf.subtract(preproc_image, mean_tensor), std_tensor)
+    else:
+      preproc_image = tf.subtract(preproc_image, 0.5)
+      preproc_image = tf.multiply(preproc_image, 2.0)
+
     return preproc_image
 
 def preprocess_training(img, height, width, normalize=None):
@@ -370,6 +355,13 @@ def preprocess_training(img, height, width, normalize=None):
       distorted_image = tf.image.per_image_standardization(distorted_image)
 
     distorted_image = tf.image.random_flip_left_right(distorted_image)
+    if short_scale:
+      mean_tensor = tf.reshape(tf.constant(mean, tf.float32), [1, 1, 3])
+      std_tensor = tf.reshape(tf.constant(std, tf.float32), [1, 1, 3])
+      distorted_image = tf.divide(tf.subtract(distorted_image, mean_tensor), std_tensor)
+    else:
+      distorted_image = tf.subtract(distorted_image, 0.5)
+      distorted_image = tf.multiply(distorted_image, 2.0)
 
     return distorted_image
 
