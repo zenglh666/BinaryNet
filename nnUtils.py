@@ -104,8 +104,8 @@ def MoreAccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1
                             initializer=tf.variance_scaling_initializer(mode='fan_avg'))
             if FLAGS.weight_norm:
                 w = tf.layers.batch_normalization(w, axis=2, training=is_training, trainable=False, reuse=reuse, epsilon=1e-20)
-            else:
-                w = tf.clip_by_value(w,-1,1)
+            #else:
+                #w = tf.clip_by_value(w,-1,1)
 
             w_pow = tf.pow(tf.abs(w),FLAGS.zeta)
             w_pow_sum = tf.reduce_sum(w_pow, axis=[0,1,2], keep_dims=True)
@@ -133,7 +133,7 @@ def SpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
         nInputPlane = x.get_shape().as_list()[3]
         with tf.variable_scope(name, values=[x], reuse=reuse):
             w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
-                            initializer=tf.truncated_normal_initializer(stddev=tf.sqrt(2/(kH*kW*nInputPlane))),
+                            initializer=tf.variance_scaling_initializer(),
                             regularizer=regularizer)
             if FLAGS.weight_norm:
                 w = tf.layers.batch_normalization(w, axis=2, training=is_training, trainable=False, reuse=reuse, epsilon=1e-20)

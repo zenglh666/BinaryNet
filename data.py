@@ -271,7 +271,7 @@ class DataProvider:
             capacity=min_queue_examples * 4,
             min_after_dequeue=min_queue_examples)
           with tf.device('/gpu:0'):
-            if FLAGS.distort_color:
+            if short_scale:
               mean_tensor = tf.reshape(tf.constant(mean, tf.float32), [1, 1, 1, 3])
               std_tensor = tf.reshape(tf.constant(std, tf.float32), [1, 1, 1, 3])
               #eigval_tensor = tf.reshape(tf.constant(eigval, tf.float32), [1, 1, 1, 3])
@@ -293,7 +293,7 @@ class DataProvider:
             num_threads=num_threads,
             capacity=min_queue_examples)
           with tf.device('/gpu:0'):
-            if FLAGS.distort_color:
+            if short_scale:
               mean_tensor = tf.reshape(tf.constant(mean, tf.float32), [1, 1, 1, 3])
               std_tensor = tf.reshape(tf.constant(std, tf.float32), [1, 1, 1, 3])
 

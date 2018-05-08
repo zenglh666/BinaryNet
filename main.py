@@ -189,6 +189,11 @@ def train(model, dataset, optimizer,
                 [decay_step, decay_step + decay_step//4, decay_step + decay_step//2],
                 [initial_learning_rate, initial_learning_rate/10, 
                  initial_learning_rate/100, initial_learning_rate/1000])
+        elif FLAGS.decay_plan == 3:
+            lr = tf.train.piecewise_constant(
+                global_step,
+                [decay_step, decay_step + decay_step//2],
+                [initial_learning_rate, initial_learning_rate/10, initial_learning_rate/100])
 
         if optimizer == 'SGD':
             
