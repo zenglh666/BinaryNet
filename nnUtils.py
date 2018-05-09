@@ -6,7 +6,7 @@ from tensorflow.python.framework import ops
 
 tf.app.flags.DEFINE_string('regularizer', 'None',
                            """regularizer for weights:L1(L1),L2(L2)""")
-tf.app.flags.DEFINE_float('regularizer_norm', 0.0001,
+tf.app.flags.DEFINE_float('regularizer_norm', 0.000,
                           """regularizer norm.""")
 tf.app.flags.DEFINE_integer('bit', 1,
                                """number of bit""")

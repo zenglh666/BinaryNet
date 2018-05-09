@@ -37,8 +37,7 @@ def __read_cifar(filenames, train=False):
   # See http://www.cs.toronto.edu/~kriz/cifar.html for a description of the
   # input format.
   for f in filenames:
-    if not tf.gfile.Exists(f):
-      raise ValueError('Failed to find file: ' + f)
+    assert tf.gfile.Exists(f), 'Failed to find file: ' + f
   if train:
     data = []
     labels = []
@@ -166,7 +165,7 @@ def __parse_scale_example_proto(example_serialized):
 
   return features['image/encoded'], label
 
-def __read_imagenet(data_files, name, train=True, num_readers=2):
+def __read_imagenet(data_files, name, train=True, num_readers=4):
     filename_queue = tf.train.string_input_producer(data_files, shuffle=False, capacity=32)
 
     # Approximate number of examples per shard.
@@ -211,7 +210,7 @@ def __read_imagenet(data_files, name, train=True, num_readers=2):
           bounding_boxes=bbox,
           min_object_covered=0.1,
           aspect_ratio_range=[0.75, 1.33],
-          area_range=[0.05, 1.0],
+          area_range=[0.5, 1.2],
           max_attempts=100,
           use_image_if_no_bounding_boxes=True)
         bbox_begin, bbox_size, distort_bbox = sample_distorted_bounding_box
@@ -225,12 +224,10 @@ def __read_imagenet(data_files, name, train=True, num_readers=2):
       short_scale = True
 
 
-    global size_list, mean, std, eigval, eigvec, default_resize_size
+    global size_list, mean, std, default_resize_size
     size_list = [224, 256, 288, 320, 352]
     mean = [ 0.485, 0.456, 0.406 ]
     std = [ 0.229, 0.224, 0.225 ]
-    eigval = [ 0.2175, 0.0188, 0.0045 ]
-    eigvec = [[ -0.5675,  0.7192,  0.4009 ], [-0.5808, -0.0045, -0.8140 ], [ -0.5836, -0.6948,  0.4203 ]]
     if FLAGS.resize_size > 0:
       default_resize_size = FLAGS.resize_size
     else:
@@ -263,7 +260,7 @@ class DataProvider:
 
         image, label = self.data
         if self.training:
-          image_processed = preprocess_training(image, height=self.size[1], width=self.size[2])
+          image_processed = self.__preprocess_training(image, height=self.size[1], width=self.size[2])
           images, label_batch = tf.train.shuffle_batch(
             [image_processed, label],
             batch_size=batch_size,
@@ -271,7 +268,7 @@ class DataProvider:
             capacity=min_queue_examples * 4,
             min_after_dequeue=min_queue_examples)
         else:
-          image_processed = preprocess_evaluation(image, height=self.size[1], width=self.size[2])
+          image_processed = self.__preprocess_evaluation(image, height=self.size[1], width=self.size[2])
           images, label_batch = tf.train.batch(
             [image_processed, label],
             batch_size=batch_size,
@@ -281,89 +278,87 @@ class DataProvider:
 
 
 
-def preprocess_evaluation(img, height, width, normalize=None):
-    img_size = tf.shape(img)
-    img_size_float = tf.cast(img_size, tf.float32)
-    resize_size_float = float(default_resize_size)
-    resize_size_int = int(default_resize_size)
-    if short_scale:
-      size = tf.cond(img_size[0] > img_size[1], 
-        lambda: [tf.cast(img_size_float[0] / img_size_float[1] * resize_size_float, tf.int32), resize_size_int],
-        lambda: [resize_size_int, tf.cast(img_size_float[1] / img_size_float[0] * resize_size_float, tf.int32)]
-        )
-    else:
-      size = [resize_size_int, resize_size_int]
-    img = tf.image.resize_images(img, size)
+    def __preprocess_evaluation(self, img, height, width, normalize=None):
+      img_size = tf.shape(img)
+      img_size_float = tf.cast(img_size, tf.float32)
+      resize_size_float = float(default_resize_size)
+      resize_size_int = int(default_resize_size)
+      if short_scale:
+        size = tf.cond(img_size[0] > img_size[1], 
+          lambda: [tf.cast(img_size_float[0] / img_size_float[1] * resize_size_float, tf.int32), resize_size_int],
+          lambda: [resize_size_int, tf.cast(img_size_float[1] / img_size_float[0] * resize_size_float, tf.int32)])
+      else:
+        size = [resize_size_int, resize_size_int]
+      img = tf.image.resize_images(img, size)
 
-    preproc_image = tf.image.resize_image_with_crop_or_pad(img, height, width)
-    preproc_image.set_shape([height, width, 3])
-    if normalize:
+      preproc_image = tf.image.resize_image_with_crop_or_pad(img, height, width)
+      preproc_image.set_shape([height, width, 3])
+      if normalize:
          # Subtract off the mean and divide by the variance of the pixels.
         preproc_image = tf.image.per_image_standardization(preproc_image)
 
-    if short_scale:
-      mean_tensor = tf.reshape(tf.constant(mean, tf.float32), [1, 1, 3])
-      std_tensor = tf.reshape(tf.constant(std, tf.float32), [1, 1, 3])
-      preproc_image = tf.divide(tf.subtract(preproc_image, mean_tensor), std_tensor)
-    else:
-      preproc_image = tf.subtract(preproc_image, 0.5)
-      preproc_image = tf.multiply(preproc_image, 2.0)
+      if short_scale:
+        mean_tensor = tf.reshape(tf.constant(mean, tf.float32), [1, 1, 3])
+        std_tensor = tf.reshape(tf.constant(std, tf.float32), [1, 1, 3])
+        preproc_image = tf.divide(tf.subtract(preproc_image, mean_tensor), std_tensor)
+      else:
+        preproc_image = tf.subtract(preproc_image, 0.5)
+        preproc_image = tf.multiply(preproc_image, 2.0)
 
-    return preproc_image
+      return preproc_image
 
-def preprocess_training(img, height, width, normalize=None):
+    def __preprocess_training(self, img, height, width, normalize=None):
 
-    # Image processing for training the network. Note the many random
-    # distortions applied to the image.
+      # Image processing for training the network. Note the many random
+      # distortions applied to the image.
 
-    # Randomly crop a [height, width] section of the image.
-    img_size = tf.shape(img)
-    img_size_float = tf.cast(img_size, tf.float32)
-    size_list_float_tensor = tf.constant(size_list, tf.float32)
-    size_list_int_tensor = tf.constant(size_list, tf.int32)
+      # Randomly crop a [height, width] section of the image.
+      img_size = tf.shape(img)
+      img_size_float = tf.cast(img_size, tf.float32)
+      size_list_float_tensor = tf.constant(size_list, tf.float32)
+      size_list_int_tensor = tf.constant(size_list, tf.int32)
 
-    if FLAGS.multiple_scale:
-      size_index = tf.random_uniform([1], maxval=len(size_list), dtype=tf.int32)[0]
-      resize_size_float = size_list_float_tensor[size_index]
-      resize_size_int = size_list_int_tensor[size_index]
-    else:
-      resize_size_float = float(default_resize_size)
-      resize_size_int = int(default_resize_size)
-    if short_scale:
-      size = tf.cond(img_size[0] > img_size[1], 
-        lambda: [tf.cast(img_size_float[0] / img_size_float[1] * resize_size_float, tf.int32), resize_size_int],
-        lambda: [resize_size_int, tf.cast(img_size_float[1] / img_size_float[0] * resize_size_float, tf.int32)]
-        )
-      img = tf.image.resize_images(img, size)
-      distorted_image = tf.random_crop(img, [height, width, 3])
-    else:
-      size = [height, width]
-      distorted_image = tf.image.resize_images(img, size)
+      if FLAGS.multiple_scale:
+        size_index = tf.random_uniform([1], maxval=len(size_list), dtype=tf.int32)[0]
+        resize_size_float = size_list_float_tensor[size_index]
+        resize_size_int = size_list_int_tensor[size_index]
+      else:
+        resize_size_float = float(default_resize_size)
+        resize_size_int = int(default_resize_size)
+      if short_scale:
+        size = tf.cond(img_size[0] > img_size[1], 
+          lambda: [tf.cast(img_size_float[0] / img_size_float[1] * resize_size_float, tf.int32), resize_size_int],
+          lambda: [resize_size_int, tf.cast(img_size_float[1] / img_size_float[0] * resize_size_float, tf.int32)])
+        img = tf.image.resize_images(img, size)
+        distorted_image = tf.random_crop(img, [height, width, 3])
+      else:
+        size = [height, width]
+        distorted_image = tf.image.resize_images(img, size)
     
-    distorted_image.set_shape([height, width, 3])
+      distorted_image.set_shape([height, width, 3])
 
-    if FLAGS.distort_color:
-      distorted_image = tf.image.random_brightness(distorted_image,max_delta=0.25)
-      distorted_image = tf.image.random_contrast(distorted_image,lower=0.6, upper=1.4)
-      distorted_image = tf.image.random_saturation(distorted_image,lower=0.6, upper=1.4)
-      distorted_image = tf.image.random_hue(distorted_image, max_delta=0.2)
+      if FLAGS.distort_color:
+        distorted_image = tf.image.random_brightness(distorted_image,max_delta=0.25)
+        distorted_image = tf.image.random_contrast(distorted_image,lower=0.6, upper=1.4)
+        distorted_image = tf.image.random_saturation(distorted_image,lower=0.6, upper=1.4)
+        distorted_image = tf.image.random_hue(distorted_image, max_delta=0.2)
 
-    # Because these operations are not commutative, consider randomizing
-    # the order their operation.
-    if normalize:
-      # Subtract off the mean and divide by the variance of the pixels.
-      distorted_image = tf.image.per_image_standardization(distorted_image)
+      # Because these operations are not commutative, consider randomizing
+      # the order their operation.
+      if normalize:
+        # Subtract off the mean and divide by the variance of the pixels.
+        distorted_image = tf.image.per_image_standardization(distorted_image)
 
-    distorted_image = tf.image.random_flip_left_right(distorted_image)
-    if short_scale:
-      mean_tensor = tf.reshape(tf.constant(mean, tf.float32), [1, 1, 3])
-      std_tensor = tf.reshape(tf.constant(std, tf.float32), [1, 1, 3])
-      distorted_image = tf.divide(tf.subtract(distorted_image, mean_tensor), std_tensor)
-    else:
-      distorted_image = tf.subtract(distorted_image, 0.5)
-      distorted_image = tf.multiply(distorted_image, 2.0)
+      distorted_image = tf.image.random_flip_left_right(distorted_image)
+      if short_scale:
+        mean_tensor = tf.reshape(tf.constant(mean, tf.float32), [1, 1, 3])
+        std_tensor = tf.reshape(tf.constant(std, tf.float32), [1, 1, 3])
+        distorted_image = tf.divide(tf.subtract(distorted_image, mean_tensor), std_tensor)
+      else:
+        distorted_image = tf.subtract(distorted_image, 0.5)
+        distorted_image = tf.multiply(distorted_image, 2.0)
 
-    return distorted_image
+      return distorted_image
 
 def group_batch_images(x):
     sz = x.get_shape().as_list()
