@@ -5,10 +5,14 @@ from __future__ import print_function
 from datetime import datetime
 import math
 import time
+import os
+import importlib
 
 import numpy as np
 import tensorflow as tf
+from tensorflow.python.platform import gfile
 from data import get_data_provider
+import nnUtils
 
 def evaluate(model, dataset,
         batch_size=128,
@@ -129,7 +133,14 @@ def evaluate(model, dataset,
         return total_acc1, total_acc5, total_loss
 
 def main(argv=None):  # pylint: disable=unused-argument
-  evaluate()
+    model_file = os.path.join('./models', FLAGS.model + '.py')
+    assert gfile.Exists(model_file), 'no model file named: ' + model_file
+    m = importlib.import_module('models.' + FLAGS.model)
+    evaluate(m, FLAGS.dataset,
+        batch_size=128,
+        num_gpu=FLAGS.num_gpu,
+        if_debug=False,
+        checkpoint_dir=FLAGS.checkpoint_dir)
 
 
 if __name__ == '__main__':
@@ -138,9 +149,9 @@ if __name__ == '__main__':
                              """Directory where to read model checkpoints.""")
   tf.app.flags.DEFINE_string('dataset', 'cifar10',
                              """Name of dataset used.""")
-  tf.app.flags.DEFINE_string('model_name', 'model',
+  tf.app.flags.DEFINE_string('model', 'model',
                              """Name of loaded model.""")
-  tf.app.flags.DEFINE_string('num_gpu', 0,
+  tf.app.flags.DEFINE_integer('num_gpu', 1,
                                """number of gpus to use.If 0 then cpu""")
 
   FLAGS.log_dir = FLAGS.checkpoint_dir+'/log/'
