@@ -227,14 +227,6 @@ class DataProvider:
                 batch_size=batch_size,
                 num_threads=num_threads,
                 capacity=min_queue_examples)
-        with tf.device('/gpu:0'):
-            if FLAGS.style_th:
-                mean_tensor = tf.reshape(tf.constant(mean, tf.float32), [1, 1, 1, 3])
-                std_tensor = tf.reshape(tf.constant(std, tf.float32), [1, 1, 1, 3])
-                images = tf.divide(tf.subtract(images, mean_tensor), std_tensor)
-            else:
-                images = tf.subtract(images, 0.5)
-                images = tf.multiply(images, 2.0)
         return images, tf.reshape(label_batch, [batch_size])
 
 
@@ -259,6 +251,14 @@ class DataProvider:
         if normalize:
             # Subtract off the mean and divide by the variance of the pixels.
             preproc_image = tf.image.per_image_standardization(preproc_image)
+
+        if FLAGS.style_th:
+            mean_tensor = tf.reshape(tf.constant(mean, tf.float32), [1, 1, 3])
+            std_tensor = tf.reshape(tf.constant(std, tf.float32), [1, 1, 3])
+            preproc_image = tf.divide(tf.subtract(preproc_image, mean_tensor), std_tensor)
+        else:
+            preproc_image = tf.subtract(preproc_image, 0.5)
+            preproc_image = tf.multiply(preproc_image, 2.0)
 
         return preproc_image
 
@@ -306,6 +306,13 @@ class DataProvider:
             distorted_image = tf.image.per_image_standardization(distorted_image)
 
         distorted_image = tf.image.random_flip_left_right(distorted_image)
+        if FLAGS.style_th:
+            mean_tensor = tf.reshape(tf.constant(mean, tf.float32), [1, 1, 3])
+            std_tensor = tf.reshape(tf.constant(std, tf.float32), [1, 1, 3])
+            distorted_image = tf.divide(tf.subtract(distorted_image, mean_tensor), std_tensor)
+        else:
+            distorted_image = tf.subtract(distorted_image, 0.5)
+            distorted_image = tf.multiply(distorted_image, 2.0)
 
         return distorted_image
 
