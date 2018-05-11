@@ -28,6 +28,8 @@ tf.app.flags.DEFINE_boolean('distort_color',False,
                             '''If we distort color''')
 tf.app.flags.DEFINE_boolean('multiple_scale',False,
                             '''If we distort color''')
+tf.app.flags.DEFINE_boolean('random_scale',False,
+                            '''If we distort color''')
 FLAGS = tf.app.flags.FLAGS
 
 def __read_cifar(filenames, train=False):
@@ -210,7 +212,7 @@ def __read_imagenet(data_files, name, train=True, num_readers=4):
           bounding_boxes=bbox,
           min_object_covered=0.1,
           aspect_ratio_range=[0.75, 1.33],
-          area_range=[0.5, 1.2],
+          area_range=[0.75, 1.0],
           max_attempts=100,
           use_image_if_no_bounding_boxes=True)
         bbox_begin, bbox_size, distort_bbox = sample_distorted_bounding_box
@@ -313,19 +315,25 @@ class DataProvider:
       # distortions applied to the image.
 
       # Randomly crop a [height, width] section of the image.
-      img_size = tf.shape(img)
-      img_size_float = tf.cast(img_size, tf.float32)
-      size_list_float_tensor = tf.constant(size_list, tf.float32)
-      size_list_int_tensor = tf.constant(size_list, tf.int32)
+      
 
-      if FLAGS.multiple_scale:
-        size_index = tf.random_uniform([1], maxval=len(size_list), dtype=tf.int32)[0]
-        resize_size_float = size_list_float_tensor[size_index]
-        resize_size_int = size_list_int_tensor[size_index]
-      else:
-        resize_size_float = float(default_resize_size)
-        resize_size_int = int(default_resize_size)
       if short_scale:
+        if FLAGS.multiple_scale:
+          if FLAGS.random_scale:
+            resize_size_int = tf.random_uniform([1], minval=size_list[0], maxval=size_list[-1], dtype=tf.int32)[0]
+            resize_size_float = tf.cast(resize_size_int, tf.float32)
+          else:
+            size_list_float_tensor = tf.constant(size_list, tf.float32)
+            size_list_int_tensor = tf.constant(size_list, tf.int32)
+            size_index = tf.random_uniform([1], maxval=len(size_list), dtype=tf.int32)[0]
+            resize_size_float = size_list_float_tensor[size_index]
+            resize_size_int = size_list_int_tensor[size_index]
+        else:
+          resize_size_float = float(default_resize_size)
+          resize_size_int = int(default_resize_size)
+      
+        img_size = tf.shape(img)
+        img_size_float = tf.cast(img_size, tf.float32)
         size = tf.cond(img_size[0] > img_size[1], 
           lambda: [tf.cast(img_size_float[0] / img_size_float[1] * resize_size_float, tf.int32), resize_size_int],
           lambda: [resize_size_int, tf.cast(img_size_float[1] / img_size_float[0] * resize_size_float, tf.int32)])

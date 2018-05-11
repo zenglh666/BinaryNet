@@ -327,11 +327,15 @@ def __train(model, logger):
         curr_count = 0
 
         logger.info('Started epoch %d' % epoch)
-        while curr_count < data.size[0] and not coord.should_stop():
-            curr_step, _, loss_val = sess.run([global_step, train_op, loss])
-            curr_count += FLAGS.batch_size
-            if curr_step % 100 == 0:
-                logger.info('Cunrrent step: %d, Loss: %.3f' % (curr_step, loss_val))
+        try:
+            while curr_count < data.size[0] and not coord.should_stop():
+                curr_step, _, loss_val = sess.run([global_step, train_op, loss])
+                curr_count += FLAGS.batch_size
+                if curr_step % 100 == 0:
+                    logger.info('Cunrrent step: %d, Loss: %.3f' % (curr_step, loss_val))
+        except Exception as e:  # pylint: disable=broad-except
+            coord.request_stop(e)
+            break
 
         if FLAGS.summary:
             step, acc_value, loss_value, summary = sess.run(
