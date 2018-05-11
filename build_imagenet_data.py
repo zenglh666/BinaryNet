@@ -99,7 +99,7 @@ tf.app.flags.DEFINE_string('train_directory', 'E:/ILSVRC2012/ILSVRC2012_img_trai
                            'Training data directory')
 tf.app.flags.DEFINE_string('validation_directory', 'E:/ILSVRC2012/ILSVRC2012_img_val',
                            'Validation data directory')
-tf.app.flags.DEFINE_string('output_directory', 'E:/data2/imagenet_scale256_tfrecord',
+tf.app.flags.DEFINE_string('output_directory', 'F:/data/imagenet_long_scale256_tfrecord',
                            'Output data directory')
 
 tf.app.flags.DEFINE_integer('train_shards', 512,
@@ -110,6 +110,8 @@ tf.app.flags.DEFINE_integer('validation_shards', 64,
 tf.app.flags.DEFINE_integer('num_threads', 8,
                             'Number of threads to preprocess the images.')
 tf.app.flags.DEFINE_integer('resize_size', 256,
+                            'resize size.')
+tf.app.flags.DEFINE_bool('short_resize', True,
                             'resize size.')
 
 # The labels file contains a list of valid labels are held in this file.
@@ -195,8 +197,10 @@ class ImageCoder(object):
     self._decode_jpeg = tf.image.decode_jpeg(self._decode_jpeg_data, channels=3)
 
     self._encode_jpeg_data = tf.placeholder(dtype=tf.uint8, shape=[None,None,3])
+    self._height = tf.placeholder(dtype=tf.int32)
+    self._width = tf.placeholder(dtype=tf.int32)
     self._resize_image = tf.image.resize_images(tf.cast(self._encode_jpeg_data, tf.float32),
-                             [FLAGS.resize_size, FLAGS.resize_size])
+                             [self._height, self._width])
     self._resize_image_cast = tf.cast(tf.clip_by_value(self._resize_image, 0, 255.), tf.uint8)
     self._encode_jpeg = tf.image.encode_jpeg(self._resize_image_cast)
 
@@ -218,9 +222,24 @@ class ImageCoder(object):
   def encode_jpeg(self, image_data):
     assert len(image_data.shape) == 3
     assert image_data.shape[2] == 3
+    if FLAGS.short_resize:
+      height = image_data.shape[0]
+      width = image_data.shape[1]
+      if height < width:
+        resize_height = FLAGS.resize_size
+        resize_width = int(width * (float(resize_height) / float(height)))
+      else:
+        resize_width = FLAGS.resize_size
+        resize_height = int(height * (float(resize_width) / float(width)))
+    else:
+      resize_width = FLAGS.resize_size
+      resize_height = FLAGS.resize_size
     image = self._sess.run(self._encode_jpeg,
-                           feed_dict={self._encode_jpeg_data: image_data})
-    return image
+                           feed_dict={
+                            self._encode_jpeg_data: image_data,
+                            self._height: resize_height,
+                            self._width: resize_width})
+    return image, resize_height, resize_width
 
 
 def _is_png(filename):
@@ -292,13 +311,11 @@ def _process_image(filename, coder):
 
   # Check that image converted to RGB
   assert len(image.shape) == 3
-  height = image.shape[0]
-  width = image.shape[1]
   assert image.shape[2] == 3
 
-  image_data = coder.encode_jpeg(image)
+  image_data, height, width = coder.encode_jpeg(image)
 
-  return image_data, FLAGS.resize_size, FLAGS.resize_size
+  return image_data, height, width
 
 
 def _process_image_files_batch(coder, thread_index, ranges, name, filenames, labels, num_shards):
