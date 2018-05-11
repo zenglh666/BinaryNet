@@ -16,13 +16,17 @@ import pickle
 
 tf.app.flags.DEFINE_string('imagenet_data_dir', 'F:\\data\\imagenet_scale256',
                            """Path to the imagenet data directory.""")
+tf.app.flags.DEFINE_string('imagenet_train_data_dir', '',
+                           """Path to the imagenet data directory.""")
+tf.app.flags.DEFINE_string('imagenet_valid_data_dir', '',
+                           """Path to the imagenet data directory.""")
 tf.app.flags.DEFINE_string('cifar_data_dir', 'F:\\data\\Cifar',
                            """Path to the cifar data directory.""")
 tf.app.flags.DEFINE_integer('resize_size', 0,
                             """Provide square images of this size.""")
 tf.app.flags.DEFINE_integer('crop_size', 224,
                             """Provide square images of this size.""")
-tf.app.flags.DEFINE_boolean('style_th',True,
+tf.app.flags.DEFINE_boolean('style_th',False,
                             '''If we distort color''')
 tf.app.flags.DEFINE_boolean('distort_color',False,
                             '''If we distort color''')
@@ -331,7 +335,10 @@ def get_data_provider(name, training=True):
         if name == 'imagenet_scale':
             FLAGS.style_th = True
         if training:
-            path = os.path.join(FLAGS.imagenet_data_dir,'train_tfrecord')
+            if FLAGS.imagenet_train_data_dir == '':
+                path = os.path.join(FLAGS.imagenet_data_dir,'train_tfrecord')
+            else:
+                path = FLAGS.imagenet_train_data_dir
             file_pattern = os.path.join(path, '%s-*' % 'train')
             data_files = tf.gfile.Glob(file_pattern)
             assert data_files, 'No files found for dataset %s/%s at %s'%(
@@ -339,7 +346,10 @@ def get_data_provider(name, training=True):
             return DataProvider(__read_imagenet(data_files, name, train=training),
                                 [1281167, FLAGS.crop_size, FLAGS.crop_size, 3], training=training)
         else:
-            path = os.path.join(FLAGS.imagenet_data_dir,'validation_tfrecord')
+            if FLAGS.imagenet_valid_data_dir == ''
+                path = os.path.join(FLAGS.imagenet_data_dir,'validation_tfrecord')
+            else:
+                path = FLAGS.imagenet_valid_data_dir
             file_pattern = os.path.join(path, '%s-*' % 'validation')
             data_files = tf.gfile.Glob(file_pattern)
             assert data_files, 'No files found for dataset %s/%s at %s' %(
