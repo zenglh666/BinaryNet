@@ -346,7 +346,7 @@ def get_data_provider(name, training=True):
             return DataProvider(__read_imagenet(data_files, name, train=training),
                                 [1281167, FLAGS.crop_size, FLAGS.crop_size, 3], training=training)
         else:
-            if FLAGS.imagenet_valid_data_dir == ''
+            if FLAGS.imagenet_valid_data_dir == '':
                 path = os.path.join(FLAGS.imagenet_data_dir,'validation_tfrecord')
             else:
                 path = FLAGS.imagenet_valid_data_dir
