@@ -72,12 +72,15 @@ def evaluate(model, dataset,
             config=tf.ConfigProto(
                 log_device_placement=False, allow_soft_placement=True,
                 gpu_options=tf.GPUOptions(allow_growth=True)))
-        ckpt = tf.train.get_checkpoint_state(checkpoint_dir+'/')
-        if ckpt and ckpt.model_checkpoint_path:
-        # Restores from checkpoint
-            saver.restore(sess, ckpt.model_checkpoint_path)
+        if FLAGS.checkpoint_file == '':
+            ckpt = tf.train.get_checkpoint_state(checkpoint_dir+'/')
+            if ckpt and ckpt.model_checkpoint_path:
+            # Restores from checkpoint
+                saver.restore(sess, ckpt.model_checkpoint_path)
+            else:
+                return 0., 0., 0.
         else:
-            return 0., 0., 0.
+            saver.restore(sess, FLAGS.checkpoint_file)
 
          # Start the queue runners.
         coord = tf.train.Coordinator()
@@ -127,6 +130,8 @@ if __name__ == '__main__':
   FLAGS = tf.app.flags.FLAGS
   tf.app.flags.DEFINE_string('checkpoint_dir', './results/model',
                              """Directory where to read model checkpoints.""")
+  tf.app.flags.DEFINE_string('checkpoint_file', '',
+                             """File of checkpoints.""")
   tf.app.flags.DEFINE_string('dataset', 'cifar10',
                              """Name of dataset used.""")
   tf.app.flags.DEFINE_string('model', 'model',

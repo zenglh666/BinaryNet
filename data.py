@@ -34,10 +34,23 @@ tf.app.flags.DEFINE_boolean('multiple_scale',False,
                             '''If we distort color''')
 tf.app.flags.DEFINE_boolean('random_scale',False,
                             '''If we distort color''')
+tf.app.flags.DEFINE_boolean('use_pickle',False,
+                            '''If we distort color''')
 
 FLAGS = tf.app.flags.FLAGS
+train_data = None
+train_labels = None
+validation_data = None
+validation_labels = None
 
 def __read_cifar(filenames, train=False):
+    global size_list, default_resize_size
+    size_list = [28, 32, 36, 40, 44]
+    if FLAGS.resize_size > 0:
+        default_resize_size = FLAGS.resize_size
+    else:
+        default_resize_size = 32
+
     for f in filenames:
         assert tf.gfile.Exists(f), 'Failed to find file: ' + f
     
@@ -67,14 +80,6 @@ def __read_cifar(filenames, train=False):
     labels_tensor = tf.constant(labels, dtype=tf.int32)
 
     image, label = tf.train.slice_input_producer([data_tensor, labels_tensor])
-
-    global size_list, default_resize_size
-    size_list = [28, 32, 36, 40, 44]
-    if FLAGS.resize_size > 0:
-        default_resize_size = FLAGS.resize_size
-    else:
-        default_resize_size = 32
-
     return tf.image.convert_image_dtype(image, dtype=tf.float32), label
 
 def __parse_example_proto(example_serialized):
@@ -125,9 +130,63 @@ def __parse_scale_example_proto(example_serialized):
 
     return features['image/encoded'], label
 
-def __read_imagenet(data_files, name, train=True, num_readers=4):
-    filename_queue = tf.train.string_input_producer(data_files, shuffle=False, capacity=32)
+def __create_pickle_data(filenames, train):
+    global train_data, train_labels, validation_data, validation_labels
+    if train:
+        if train_data and train_labels:
+            return
+    else:
+        if validation_data and validation_labels:
+            return
+    data = []
+    labels = []
+    for file in filenames:
+        fo = open(file, 'rb')
+        entry = pickle.load(fo, encoding='bytes')
+        data.extend(entry['images'])
+        labels.extend(entry['labels'])
+        fo.close()
+    assert len(data) == len(labels), 'data files are damaged'
+    if train:
+        train_data = data
+        train_labels = labels
+    else:
+        assert len(data) == 50000
+        validation_data = data
+        validation_labels = labels
+    return
 
+def __get_train_data_label(index):
+    return train_data[index], train_labels[index]
+
+def __get_validation_data_label(index):
+    return validation_data[index], validation_labels[index]
+
+def __read_imagenet(data_files, name, train=True, num_readers=4):
+    global size_list, mean, std, default_resize_size
+    size_list = [224, 256, 288, 320, 352]
+    mean = [ 0.485, 0.456, 0.406 ]
+    std = [ 0.229, 0.224, 0.225 ]
+    if FLAGS.resize_size > 0:
+        default_resize_size = FLAGS.resize_size
+    else:
+        default_resize_size = 256
+
+    if FLAGS.use_pickle:
+        __create_pickle_data(data_files, train)
+        if train:
+            index_queue = tf.train.range_input_producer(limit=1281167, capacity=1024, shuffle=True)
+            index = index_queue.dequeue()
+            image_buffer, label_index = tf.py_func(__get_train_data_label, [index], [tf.string, tf.int32])
+        else:
+            index_queue = tf.train.range_input_producer(limit=50000, capacity=1024, shuffle=False)
+            index = index_queue.dequeue()
+            image_buffer, label_index = tf.py_func(__get_validation_data_label, [index], [tf.string, tf.int32])
+        image = tf.image.decode_jpeg(image_buffer, channels=3)
+        image = tf.image.convert_image_dtype(image, dtype=tf.float32)
+        return image, tf.reshape(label_index, [1])
+
+    filename_queue = tf.train.string_input_producer(data_files, shuffle=False, capacity=32)
     # Approximate number of examples per shard.
     examples_per_shard = 1024
     # Size the random shuffle queue to balance between good global
@@ -179,16 +238,6 @@ def __read_imagenet(data_files, name, train=True, num_readers=4):
             bbox_begin, bbox_size, distort_bbox = sample_distorted_bounding_box
             image = tf.slice(image, bbox_begin, bbox_size)
         label_index = tf.subtract(label_index, 1)
-
-
-    global size_list, mean, std, default_resize_size
-    size_list = [224, 256, 288, 320, 352]
-    mean = [ 0.485, 0.456, 0.406 ]
-    std = [ 0.229, 0.224, 0.225 ]
-    if FLAGS.resize_size > 0:
-      default_resize_size = FLAGS.resize_size
-    else:
-      default_resize_size = 256
 
     return image, label_index
 
@@ -331,12 +380,18 @@ def group_batch_images(x):
 
 
 def get_data_provider(name, training=True):
-    if name == 'imagenet' or name == 'imagenet_scale':
+    if name == 'imagenet' or name == 'imagenet_scale' or name == 'imagenet_pickle':
         if name == 'imagenet_scale':
             FLAGS.style_th = True
+        if name == 'imagenet_pickle':
+            FLAGS.style_th = True
+            FLAGS.use_pickle = True
         if training:
             if FLAGS.imagenet_train_data_dir == '':
-                path = os.path.join(FLAGS.imagenet_data_dir,'train_tfrecord')
+                if FLAGS.use_pickle:
+                    path = os.path.join(FLAGS.imagenet_data_dir,'train_pickle')
+                else:
+                    path = os.path.join(FLAGS.imagenet_data_dir,'train_tfrecord')
             else:
                 path = FLAGS.imagenet_train_data_dir
             file_pattern = os.path.join(path, '%s-*' % 'train')
@@ -347,7 +402,10 @@ def get_data_provider(name, training=True):
                                 [1281167, FLAGS.crop_size, FLAGS.crop_size, 3], training=training)
         else:
             if FLAGS.imagenet_valid_data_dir == '':
-                path = os.path.join(FLAGS.imagenet_data_dir,'validation_tfrecord')
+                if FLAGS.use_pickle:
+                    path = os.path.join(FLAGS.imagenet_data_dir,'validation_pickle')
+                else:
+                    path = os.path.join(FLAGS.imagenet_data_dir,'validation_tfrecord')
             else:
                 path = FLAGS.imagenet_valid_data_dir
             file_pattern = os.path.join(path, '%s-*' % 'validation')
