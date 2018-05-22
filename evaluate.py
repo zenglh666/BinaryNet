@@ -18,7 +18,8 @@ def evaluate(model, dataset,
         batch_size=128,
         num_gpu=1,
         if_debug=False,
-        checkpoint_dir='./checkpoint'):
+        checkpoint_dir='./checkpoint',
+        checkpoint_file=''):
     with tf.Graph().as_default() as g:
         data = get_data_provider(dataset, training=False)
         with tf.device('/cpu:0'):
@@ -72,7 +73,7 @@ def evaluate(model, dataset,
             config=tf.ConfigProto(
                 log_device_placement=False, allow_soft_placement=True,
                 gpu_options=tf.GPUOptions(allow_growth=True)))
-        if FLAGS.checkpoint_file == '':
+        if checkpoint_file == '':
             ckpt = tf.train.get_checkpoint_state(checkpoint_dir+'/')
             if ckpt and ckpt.model_checkpoint_path:
             # Restores from checkpoint
@@ -80,7 +81,7 @@ def evaluate(model, dataset,
             else:
                 return 0., 0., 0.
         else:
-            saver.restore(sess, FLAGS.checkpoint_file)
+            saver.restore(sess, checkpoint_file)
 
          # Start the queue runners.
         coord = tf.train.Coordinator()
@@ -120,7 +121,8 @@ def main(argv=None):  # pylint: disable=unused-argument
         batch_size=128,
         num_gpu=FLAGS.num_gpu,
         if_debug=False,
-        checkpoint_dir=FLAGS.checkpoint_dir)
+        checkpoint_dir=FLAGS.checkpoint_dir,
+        checkpoint_file=FLAGS.checkpoint_file)
     print('Test Accuracy Top-1: %.3f' % total_acc1)
     print('Test Accuracy Top-5: %.3f' % total_acc5)
     print('Test Loss: %.3f' % total_loss)

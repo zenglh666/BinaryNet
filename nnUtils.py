@@ -14,12 +14,18 @@ tf.app.flags.DEFINE_float('zeta', 0.0,
                           """zeta.""")
 tf.app.flags.DEFINE_boolean('weight_norm', False,
                            """weight norm.""")
+tf.app.flags.DEFINE_boolean('weight_norm_reverse', False,
+                           """weight norm reverse.""")
 tf.app.flags.DEFINE_boolean('weight_clip', False,
                            """weight clip.""")
 tf.app.flags.DEFINE_float('weight_mask', -1,
                            """weight mask.""")
 FLAGS = tf.app.flags.FLAGS
 regularizer = None
+
+@tf.RegisterGradient("CustomMask")
+def _custom_mask_grad(op, grad):
+    return [grad, tf.zeros_like(grad)]
     
 def binarize(x):
     """
@@ -107,15 +113,22 @@ def MoreAccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1
             w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
                             initializer=tf.variance_scaling_initializer(mode='fan_avg'))
             if FLAGS.weight_norm:
-                w = tf.layers.batch_normalization(
-                    w, axis=2, training=is_training, trainable=False, reuse=reuse, momentum=0.999, epsilon=1e-20)
+                if FLAGS.weight_norm_reverse:
+                    w = tf.layers.batch_normalization(
+                        w, axis=3, training=is_training, trainable=False, reuse=reuse, momentum=0.999, epsilon=1e-20)
+                else:
+                    w = tf.layers.batch_normalization(
+                        w, axis=2, training=is_training, trainable=False, reuse=reuse, momentum=0.999, epsilon=1e-20)
+                    
             if FLAGS.weight_clip:
                 w = tf.clip_by_value(w,-1,1)
             if FLAGS.weight_mask > 0:
                 mask = tf.abs(w)
                 mask = tf.nn.relu(mask - FLAGS.weight_mask)
                 mask = tf.sign(mask)
-                w = tf.multiply(w, mask)
+                g = tf.get_default_graph()
+                with g.gradient_override_map({"Mul": "CustomMask"}):
+                    w = tf.multiply(w, mask)
 
             w_pow = tf.pow(tf.abs(w),FLAGS.zeta)
             w_pow_sum = tf.reduce_sum(w_pow, axis=[0,1,2], keep_dims=True)

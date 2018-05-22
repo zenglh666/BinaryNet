@@ -44,8 +44,10 @@ validation_data = None
 validation_labels = None
 
 def __read_cifar(filenames, train=False):
-    global size_list, default_resize_size
+    global size_list, default_resize_size, mean, std
     size_list = [28, 32, 36, 40, 44]
+    mean = [ 0.5, 0.5, 0.5 ]
+    std = [ 0.5, 0.5, 0.5 ]
     if FLAGS.resize_size > 0:
         default_resize_size = FLAGS.resize_size
     else:
@@ -162,7 +164,7 @@ def __get_train_data_label(index):
 def __get_validation_data_label(index):
     return validation_data[index], validation_labels[index]
 
-def __read_imagenet(data_files, name, train=True, num_readers=4):
+def __read_imagenet(data_files, name, train=True, num_readers=1):
     global size_list, mean, std, default_resize_size
     size_list = [224, 256, 288, 320, 352]
     mean = [ 0.485, 0.456, 0.406 ]
@@ -247,7 +249,7 @@ class DataProvider:
         self.data = data
         self.training = training
 
-    def generate_batches(self, batch_size, min_queue_examples=1024, num_threads=4):
+    def generate_batches(self, batch_size, min_queue_examples=1024, num_threads=1):
         """Construct a queued batch of images and labels.
 
         Args:
@@ -280,6 +282,14 @@ class DataProvider:
                 batch_size=batch_size,
                 num_threads=num_threads,
                 capacity=min_queue_examples)
+        with tf.device('/gpu:0'):
+            if FLAGS.style_th:
+                mean_tensor = tf.reshape(tf.constant(mean, tf.float32), [1, 1, 1, 3])
+                std_tensor = tf.reshape(tf.constant(std, tf.float32), [1, 1, 1, 3])
+                images = tf.divide(tf.subtract(images, mean_tensor), std_tensor)
+            else:
+                images = tf.subtract(images, 0.5)
+                images = tf.multiply(images, 2.0)
         return images, tf.reshape(label_batch, [batch_size])
 
 
@@ -304,14 +314,6 @@ class DataProvider:
         if normalize:
             # Subtract off the mean and divide by the variance of the pixels.
             preproc_image = tf.image.per_image_standardization(preproc_image)
-
-        if FLAGS.style_th:
-            mean_tensor = tf.reshape(tf.constant(mean, tf.float32), [1, 1, 3])
-            std_tensor = tf.reshape(tf.constant(std, tf.float32), [1, 1, 3])
-            preproc_image = tf.divide(tf.subtract(preproc_image, mean_tensor), std_tensor)
-        else:
-            preproc_image = tf.subtract(preproc_image, 0.5)
-            preproc_image = tf.multiply(preproc_image, 2.0)
 
         return preproc_image
 
@@ -359,13 +361,6 @@ class DataProvider:
             distorted_image = tf.image.per_image_standardization(distorted_image)
 
         distorted_image = tf.image.random_flip_left_right(distorted_image)
-        if FLAGS.style_th:
-            mean_tensor = tf.reshape(tf.constant(mean, tf.float32), [1, 1, 3])
-            std_tensor = tf.reshape(tf.constant(std, tf.float32), [1, 1, 3])
-            distorted_image = tf.divide(tf.subtract(distorted_image, mean_tensor), std_tensor)
-        else:
-            distorted_image = tf.subtract(distorted_image, 0.5)
-            distorted_image = tf.multiply(distorted_image, 2.0)
 
         return distorted_image
 
