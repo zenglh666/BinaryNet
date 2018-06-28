@@ -14,12 +14,16 @@ tf.app.flags.DEFINE_float('zeta', 0.0,
                           """zeta.""")
 tf.app.flags.DEFINE_boolean('weight_norm', False,
                            """weight norm.""")
+tf.app.flags.DEFINE_boolean('fully_norm', False,
+                           """weight norm.""")
 tf.app.flags.DEFINE_boolean('weight_norm_reverse', False,
                            """weight norm reverse.""")
 tf.app.flags.DEFINE_boolean('weight_clip', False,
                            """weight clip.""")
 tf.app.flags.DEFINE_float('weight_mask', -1,
                            """weight mask.""")
+tf.app.flags.DEFINE_boolean('zero_quant', False,
+                           """zero quant.""")
 FLAGS = tf.app.flags.FLAGS
 regularizer = None
 
@@ -129,6 +133,25 @@ def MoreAccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1
                 g = tf.get_default_graph()
                 with g.gradient_override_map({"Mul": "CustomMask"}):
                     w = tf.multiply(w, mask)
+            elif FLAGS.zero_quant:
+                mask = tf.abs(w)
+                mask_avg = tf.reduce_mean(mask)
+                iteration = tf.constant(0, dtype=tf.int32)
+                zero_thresh = tf.constant(0, dtype=tf.float32)
+                def body(iteration, mask, mask_avg, zero_thresh):
+                    mask_thresh = tf.nn.relu(tf.subtract(mask,zero_thresh))
+                    mask_avg = tf.add(tf.reduce_mean(mask_thresh), zero_thresh)
+                    zero_thresh = tf.divide(mask_avg, 2)
+                    return [tf.add(iteration, 1), mask, mask_avg, zero_thresh]
+                while_condition = lambda i, j, k, l: tf.less(i, 20)
+                iteration, mask, mask_avg, zero_thresh = tf.while_loop(
+                    while_condition, body, [iteration, mask, mask_avg, zero_thresh],
+                    parallel_iterations=1, back_prop=False)
+                mask = tf.nn.relu(mask - zero_thresh)
+                mask = tf.sign(mask)
+                g = tf.get_default_graph()
+                with g.gradient_override_map({"Mul": "CustomMask"}):
+                    w = tf.multiply(w, mask)
 
             w_pow = tf.pow(tf.abs(w),FLAGS.zeta)
             w_pow_sum = tf.reduce_sum(w_pow, axis=[0,1,2], keep_dims=True)
@@ -176,6 +199,9 @@ def Affine(nOutputPlane, bias=False, name=None):
             w = tf.get_variable('weight', [nInputPlane, nOutputPlane],
                                 initializer=tf.variance_scaling_initializer(mode='fan_avg'),
                                 regularizer=regularizer)
+            if FLAGS.fully_norm:
+                w = tf.layers.batch_normalization(
+                    w, axis=0, training=is_training, trainable=False, reuse=reuse, momentum=0.999, epsilon=1e-20)
             output = tf.matmul(reshaped, w)
             if bias:
                 b = tf.get_variable('bias', [nOutputPlane],initializer=tf.zeros_initializer)
@@ -272,7 +298,7 @@ def Dropout(p, name='Dropout'):
             if is_training:
                 return tf.nn.dropout(x,p)
             else:
-                return x
+                return x * (1-p)
     return dropout_layer
 
 def ReLU(name='ReLU'):

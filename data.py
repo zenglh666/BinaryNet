@@ -164,7 +164,7 @@ def __get_train_data_label(index):
 def __get_validation_data_label(index):
     return validation_data[index], validation_labels[index]
 
-def __read_imagenet(data_files, name, train=True, num_readers=1):
+def __read_imagenet(data_files, name, train=True, num_readers=2):
     global size_list, mean, std, default_resize_size
     size_list = [224, 256, 288, 320, 352]
     mean = [ 0.485, 0.456, 0.406 ]
@@ -249,7 +249,7 @@ class DataProvider:
         self.data = data
         self.training = training
 
-    def generate_batches(self, batch_size, min_queue_examples=1024, num_threads=1):
+    def generate_batches(self, batch_size, min_queue_examples=1024, num_threads=4):
         """Construct a queued batch of images and labels.
 
         Args:
@@ -411,6 +411,7 @@ def get_data_provider(name, training=True):
                                 [50000, FLAGS.crop_size, FLAGS.crop_size, 3], training=training)
 
     elif name == 'cifar10':
+        FLAGS.style_th = True
         path = os.path.join(FLAGS.cifar_data_dir,'cifar10-python')
         data_dir = os.path.join(path, 'cifar-10-batches-py/')
         if training:
@@ -421,6 +422,7 @@ def get_data_provider(name, training=True):
             return DataProvider(__read_cifar([os.path.join(data_dir, 'test_batch')], train=training),
                                 [10000, 24,24, 3], training=training)
     elif name == 'cifar100':
+        FLAGS.style_th = True
         path = os.path.join(FLAGS.cifar_data_dir,'cifar100-python')
         data_dir = os.path.join(path, 'cifar-100-py/')
         if training:
