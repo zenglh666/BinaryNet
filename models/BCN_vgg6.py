@@ -20,5 +20,5 @@ model = Sequential([
     BatchNormalization(name='batchnorm6'),
     HardTanh(),
     SpatialAveragePooling(6,6,1,1, name='pool7'),
-    BinarizedWeightOnlyAffine(10, name='fc6')
+    Affine(10, name='fc6')
 ])

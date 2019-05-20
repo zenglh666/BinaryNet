@@ -41,6 +41,10 @@ tf.app.flags.DEFINE_string('load', None,
                            """Name of loaded dir.""")
 tf.app.flags.DEFINE_string('ckpt_file', '',
                            """Name of ckpt file.""")
+tf.app.flags.DEFINE_string('checkpoint_dir', '',
+                           """Name of ckpt file.""")
+tf.app.flags.DEFINE_string('log_dir', '',
+                           """Name of ckpt file.""")
 tf.app.flags.DEFINE_integer('ckpt_epoch', 0,
                            """number of ckpt epoch.""")
 tf.app.flags.DEFINE_string('dataset', 'None',

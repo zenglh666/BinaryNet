@@ -90,7 +90,13 @@ def AccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH
         with tf.variable_scope(name, values=[x], reuse=reuse):
             w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
                             initializer=tf.variance_scaling_initializer(mode='fan_avg'))
-            w = tf.clip_by_value(w,-1,1)
+            if FLAGS.weight_norm:
+                if FLAGS.weight_norm_reverse:
+                    w = tf.layers.batch_normalization(
+                        w, axis=3, training=is_training, trainable=False, reuse=reuse, momentum=0.999, epsilon=1e-20)
+                else:
+                    w = tf.layers.batch_normalization(
+                        w, axis=2, training=is_training, trainable=False, reuse=reuse, momentum=0.999, epsilon=1e-20)
             w_res = tf.identity(w)
             w_apr = tf.zeros(w.get_shape())
             for i in range(FLAGS.bit):
