@@ -14,56 +14,61 @@ import logging
 timestr =  datetime.now().isoformat().replace(':','-').replace('.','MS')
 FLAGS = tf.app.flags.FLAGS
 
-# Basic model parameters.
+# Model
+tf.app.flags.DEFINE_string('model', 'model',
+                           """Name of loaded model.""")
+tf.app.flags.DEFINE_string('dataset', 'imagenet',
+                           """Name of dataset used.""")
+# Basic training parameters.
 tf.app.flags.DEFINE_integer('batch_size', 128,
                             """Number of images to process in a batch.""")
 tf.app.flags.DEFINE_integer('num_epochs', 25,
                             """Number of epochs to train. -1 for unlimited""")
-tf.app.flags.DEFINE_float('initial_learning_rate', 0.1,
-                            """Initial learning rate used.""")
-tf.app.flags.DEFINE_float('learning_rate_decay_factor', 0.1,
-                          """Learning rate decay factor.""")
 tf.app.flags.DEFINE_integer('decay_epochs', -1,
                             """Iterations after which learning rate decays.""")
 tf.app.flags.DEFINE_integer('test_epochs', 1,
                             """Iterations after which test.""")
+tf.app.flags.DEFINE_integer('ckpt_epoch', 0,
+                           """number of ckpt epoch.""")
+# Learning Rate parameters
 tf.app.flags.DEFINE_integer('decay_plan', 0,
                             """the plan to decay laearning rate.""")
+tf.app.flags.DEFINE_float('initial_learning_rate', 0.1,
+                            """Initial learning rate used.""")
+tf.app.flags.DEFINE_float('learning_rate_decay_factor', 0.1,
+                          """Learning rate decay factor.""")
+# Optimizer Parameters
+tf.app.flags.DEFINE_string('optimizer', 'MOM',
+                           """optimizer for algorithms:MomentumOptimizer(MOM),
+                           GradientDescentOptimizer(SGD), AdamOptimizer(ADA)""")
 tf.app.flags.DEFINE_float('grad_clip_norm', 1e20,
                           """Initial learning rate.""")
 tf.app.flags.DEFINE_float('momentum', 0.9,
                           """Initial learning rate.""")
-tf.app.flags.DEFINE_string('model', 'model',
-                           """Name of loaded model.""")
+# Default Path
+tf.app.flags.DEFINE_string('checkpoint_dir', '',
+                           """Name of ckpt file.""")
 tf.app.flags.DEFINE_string('save', timestr,
                            """Name of saved dir.""")
-tf.app.flags.DEFINE_string('load', None,
-                           """Name of loaded dir.""")
 tf.app.flags.DEFINE_string('ckpt_file', '',
-                           """Name of ckpt file.""")
-tf.app.flags.DEFINE_string('checkpoint_dir', '',
                            """Name of ckpt file.""")
 tf.app.flags.DEFINE_string('log_dir', '',
                            """Name of ckpt file.""")
-tf.app.flags.DEFINE_integer('ckpt_epoch', 0,
-                           """number of ckpt epoch.""")
-tf.app.flags.DEFINE_string('dataset', 'None',
-                           """Name of dataset used.""")
-tf.app.flags.DEFINE_boolean('summary', False,
-                           """Record summary.""")
 tf.app.flags.DEFINE_string('log_file', timestr+'.log',
                            'The log file name')
-tf.app.flags.DEFINE_string('optimizer', 'NONE',
-                           """optimizer for algorithms:MomentumOptimizer(MOM),
-                           GradientDescentOptimizer(SGD), AdamOptimizer(ADA)""")
+tf.app.flags.DEFINE_string('weights_initial_file', '',
+                           """if weights_initial.""")
+# GPU
 tf.app.flags.DEFINE_integer('num_gpu', 1,
                                """number of gpus to use.If 0 then cpu""")
 tf.app.flags.DEFINE_integer('shift_gpu', 0,
                                """number of gpus to use.If 0 then cpu""")
+# Others
+tf.app.flags.DEFINE_boolean('summary', False,
+                           """Record summary.""")
 tf.app.flags.DEFINE_boolean('debug', False,
                            """if debug.""")
-tf.app.flags.DEFINE_string('weights_initial_file', '',
-                           """if weights_initial.""")
+
 
 def __average_gradients(tower_grads):
     """Calculate the average gradient for each shared variable across all towers.
@@ -297,7 +302,6 @@ def __train(model, logger):
         summary_writer = tf.summary.FileWriter(FLAGS.log_dir)
 
     saver = tf.train.Saver(max_to_keep=5)
-    # Configure options for session
     sess, coord, threads = __open_sess()
     epoch = FLAGS.ckpt_epoch
 
