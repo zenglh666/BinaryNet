@@ -10,21 +10,8 @@ tf.app.flags.DEFINE_float('regularizer_norm', 0.000,
                           """regularizer norm.""")
 tf.app.flags.DEFINE_integer('bit', 1,
                                """number of bit""")
-tf.app.flags.DEFINE_float('zeta', 0.0,
-                          """zeta.""")
 tf.app.flags.DEFINE_boolean('weight_norm', False,
                            """weight norm.""")
-tf.app.flags.DEFINE_boolean('fully_norm', False,
-                           """weight norm.""")
-tf.app.flags.DEFINE_boolean('weight_norm_reverse', False,
-                           """weight norm reverse.""")
-tf.app.flags.DEFINE_boolean('weight_clip', False,
-                           """weight clip.""")
-tf.app.flags.DEFINE_float('weight_mask', -1,
-                           """weight mask.""")
-tf.app.flags.DEFINE_boolean('zero_quant', False,
-                           """zero quant.""")
-FLAGS = tf.app.flags.FLAGS
 regularizer = None
 
 @tf.RegisterGradient("CustomMask")
@@ -41,45 +28,6 @@ def binarize(x):
         with g.gradient_override_map({"Sign": "Identity"}):
             return tf.sign(x)
 
-def BinarizedSpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
-        padding='VALID', bias=False, name='BinarizedSpatialConvolution'):
-    def b_conv2d(x, is_training=True, reuse=None):
-        nInputPlane = x.get_shape().as_list()[3]
-        with tf.variable_scope(name, values=[x], reuse=reuse):
-            w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
-                            initializer=tf.variance_scaling_initializer(mode='fan_avg'))
-
-            bin_w = binarize(w)
-            bin_x = binarize(x)
-            '''
-            Note that we use binarized version of the input and the weights. Since the binarized function uses STE
-            we calculate the gradients using bin_x and bin_w but we update w (the full precition version).
-            '''
-            out = tf.nn.conv2d(bin_x, bin_w, strides=[1, dH, dW, 1], padding=padding)
-            if bias:
-                b = tf.get_variable('bias', [nOutputPlane],initializer=tf.zeros_initializer)
-                out = tf.nn.bias_add(out, b)
-            return out
-    return b_conv2d
-
-def BinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
-        padding='VALID', bias=False, name='BinarizedWeightOnlySpatialConvolution'):
-    '''
-    This function is used only at the first layer of the model as we dont want to binarized the RGB images
-    '''
-    def bc_conv2d(x, is_training=True, reuse=None):
-        nInputPlane = x.get_shape().as_list()[3]
-        with tf.variable_scope(name, values=[x], reuse=reuse):
-            w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
-                            initializer=tf.variance_scaling_initializer(mode='fan_avg'))
-            bin_w = binarize(tf.clip_by_value(w,-1,1))
-            out = tf.nn.conv2d(x, bin_w, strides=[1, dH, dW, 1], padding=padding)
-            if bias:
-                b = tf.get_variable('bias', [nOutputPlane],initializer=tf.zeros_initializer)
-                out = tf.nn.bias_add(out, b)
-            return out
-    return bc_conv2d
-
 def AccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH=1,
         padding='VALID', bias=False, name='BinarizedWeightOnlySpatialConvolution'):
     '''
@@ -90,6 +38,7 @@ def AccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH
         with tf.variable_scope(name, values=[x], reuse=reuse):
             w = tf.get_variable('weight', [kH, kW, nInputPlane, nOutputPlane],
                             initializer=tf.variance_scaling_initializer(mode='fan_avg'))
+
             if FLAGS.weight_norm:
                 if FLAGS.weight_norm_reverse:
                     w = tf.layers.batch_normalization(
@@ -97,6 +46,7 @@ def AccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1, dH
                 else:
                     w = tf.layers.batch_normalization(
                         w, axis=2, training=is_training, trainable=False, reuse=reuse, momentum=0.999, epsilon=1e-20)
+
             w_res = tf.identity(w)
             w_apr = tf.zeros(w.get_shape())
             for i in range(FLAGS.bit):
@@ -129,46 +79,12 @@ def MoreAccurateBinarizedWeightOnlySpatialConvolution(nOutputPlane, kW, kH, dW=1
                 else:
                     w = tf.layers.batch_normalization(
                         w, axis=2, training=is_training, trainable=False, reuse=reuse, momentum=0.999, epsilon=1e-20)
-                    
-            if FLAGS.weight_clip:
-                w = tf.clip_by_value(w,-1,1)
-            if FLAGS.weight_mask > 0:
-                mask = tf.abs(w)
-                mask = tf.nn.relu(mask - FLAGS.weight_mask)
-                mask = tf.sign(mask)
-                g = tf.get_default_graph()
-                with g.gradient_override_map({"Mul": "CustomMask"}):
-                    w = tf.multiply(w, mask)
-            elif FLAGS.zero_quant:
-                mask = tf.abs(w)
-                mask_avg = tf.reduce_mean(mask)
-                iteration = tf.constant(0, dtype=tf.int32)
-                zero_thresh = tf.constant(0, dtype=tf.float32)
-                def body(iteration, mask, mask_avg, zero_thresh):
-                    mask_thresh = tf.nn.relu(tf.subtract(mask,zero_thresh))
-                    mask_avg = tf.add(tf.reduce_mean(mask_thresh), zero_thresh)
-                    zero_thresh = tf.divide(mask_avg, 2)
-                    return [tf.add(iteration, 1), mask, mask_avg, zero_thresh]
-                while_condition = lambda i, j, k, l: tf.less(i, 20)
-                iteration, mask, mask_avg, zero_thresh = tf.while_loop(
-                    while_condition, body, [iteration, mask, mask_avg, zero_thresh],
-                    parallel_iterations=1, back_prop=False)
-                mask = tf.nn.relu(mask - zero_thresh)
-                mask = tf.sign(mask)
-                g = tf.get_default_graph()
-                with g.gradient_override_map({"Mul": "CustomMask"}):
-                    w = tf.multiply(w, mask)
 
-            w_pow = tf.pow(tf.abs(w),FLAGS.zeta)
-            w_pow_sum = tf.reduce_sum(w_pow, axis=[0,1,2], keep_dims=True)
             w_res = tf.identity(w)
             w_apr = tf.zeros(w.get_shape())
             for i in range(FLAGS.bit):
                 bin_w = binarize(w_res)
-                if FLAGS.zeta < 0.1:
-                    alpha = tf.reduce_mean(tf.abs(w_res), axis=[0,1,2], keep_dims=True)
-                else:
-                    alpha = tf.div(tf.reduce_mean(tf.multiply(w_pow, tf.abs(w_res)), axis=[0,1,2], keep_dims=True), w_pow_sum)
+                alpha = tf.reduce_mean(tf.abs(w_res), axis=[0,1,2], keep_dims=True)
                 w_mul = tf.multiply(bin_w, alpha)
                 w_apr = tf.add(w_apr, w_mul)
                 w_res = tf.subtract(w_res, w_mul)
@@ -205,9 +121,6 @@ def Affine(nOutputPlane, bias=False, name=None):
             w = tf.get_variable('weight', [nInputPlane, nOutputPlane],
                                 initializer=tf.variance_scaling_initializer(mode='fan_avg'),
                                 regularizer=regularizer)
-            if FLAGS.fully_norm:
-                w = tf.layers.batch_normalization(
-                    w, axis=0, training=is_training, trainable=False, reuse=reuse, momentum=0.999, epsilon=1e-20)
             output = tf.matmul(reshaped, w)
             if bias:
                 b = tf.get_variable('bias', [nOutputPlane],initializer=tf.zeros_initializer)
@@ -215,85 +128,8 @@ def Affine(nOutputPlane, bias=False, name=None):
         return output
     return affineLayer
 
-def BinarizedAffine(nOutputPlane, bias=False, name=None):
-    def b_affineLayer(x, is_training=True, reuse=None):
-        with tf.variable_scope(name, 'Affine', values=[x], reuse=reuse):
-            '''
-            Note that we use binarized version of the input (bin_x) and the weights (bin_w). Since the binarized function uses STE
-            we calculate the gradients using bin_x and bin_w but we update w (the full precition version).
-            '''
-            bin_x = binarize(x)
-            reshaped = tf.reshape(bin_x, [x.get_shape().as_list()[0], -1])
-            nInputPlane = reshaped.get_shape().as_list()[1]
-            w = tf.get_variable('weight', [nInputPlane, nOutputPlane],
-                initializer=tf.variance_scaling_initializer(mode='fan_avg'))
-            bin_w = binarize(w)
-            output = tf.matmul(reshaped, bin_w)
-            if bias:
-                b = tf.get_variable('bias', [nOutputPlane],initializer=tf.zeros_initializer)
-                output = tf.nn.bias_add(output, b)
-        return output
-    return b_affineLayer
-
-def BinarizedWeightOnlyAffine(nOutputPlane, bias=False, name=None):
-    def bwo_affineLayer(x, is_training=True, reuse=None):
-        with tf.variable_scope(name, 'Affine', values=[x], reuse=reuse):
-            '''
-            Note that we use binarized version of the input (bin_x) and the weights (bin_w). Since the binarized function uses STE
-            we calculate the gradients using bin_x and bin_w but we update w (the full precition version).
-            '''
-            reshaped = tf.reshape(x, [x.get_shape().as_list()[0], -1])
-            nInputPlane = reshaped.get_shape().as_list()[1]
-            w = tf.get_variable('weight', [nInputPlane, nOutputPlane],
-                initializer=tf.variance_scaling_initializer(mode='fan_avg'))
-            w = tf.clip_by_value(w,-1,1)
-            bin_w = binarize(w)
-            output = tf.matmul(reshaped, bin_w)
-            if bias:
-                b = tf.get_variable('bias', [nOutputPlane],initializer=tf.zeros_initializer)
-                output = tf.nn.bias_add(output, b)
-        return output
-    return bwo_affineLayer
-
-def MoreAccurateBinarizedWeightOnlyAffine(nOutputPlane, bias=False, name=None):
-    def bwo_affineLayer(x, is_training=True, reuse=None):
-        with tf.variable_scope(name, 'Affine', values=[x], reuse=reuse):
-            '''
-            Note that we use binarized version of the input (bin_x) and the weights (bin_w). Since the binarized function uses STE
-            we calculate the gradients using bin_x and bin_w but we update w (the full precition version).
-            '''
-            reshaped = tf.reshape(x, [x.get_shape().as_list()[0], -1])
-            nInputPlane = reshaped.get_shape().as_list()[1]
-            w = tf.get_variable('weight', [nInputPlane, nOutputPlane],
-                initializer=tf.variance_scaling_initializer(mode='fan_avg'))
-            w_pow = tf.pow(tf.abs(w),FLAGS.zeta)
-            w_pow_sum = tf.reduce_sum(w_pow, axis=[0], keep_dims=True)
-            w_res = tf.identity(w)
-            w_apr = tf.zeros(w.get_shape())
-            for i in range(FLAGS.bit):
-                bin_w = binarize(w_res)
-                if FLAGS.zeta < 0.1:
-                    alpha = tf.reduce_mean(tf.abs(w_res), axis=[0], keep_dims=True)
-                else:
-                    alpha = tf.div(tf.reduce_mean(tf.multiply(w_pow, tf.abs(w_res)), axis=[0], keep_dims=True), w_pow_sum)
-                w_mul = tf.multiply(bin_w, alpha)
-                w_apr = tf.add(w_apr, w_mul)
-                w_res = tf.subtract(w_res, w_mul)
-            output = tf.matmul(reshaped, w_apr)
-            if bias:
-                b = tf.get_variable('bias', [nOutputPlane],initializer=tf.zeros_initializer)
-                output = tf.nn.bias_add(output, b)
-        return output
-    return bwo_affineLayer
-
 def Linear(nInputPlane, nOutputPlane):
     return Affine(nInputPlane, nOutputPlane, add_bias=False)
-
-
-def wrapNN(f,*args,**kwargs):
-    def layer(x, scope='', is_training=True, reuse=None):
-        return f(x,*args,**kwargs)
-    return layer
 
 def Dropout(p, name='Dropout'):
     def dropout_layer(x, is_training=True, reuse=None):
@@ -312,22 +148,6 @@ def ReLU(name='ReLU'):
         with tf.variable_scope(name, values=[x], reuse=reuse):
             return tf.nn.relu(x)
     return layer
-
-def HardTanh(name='HardTanh'):
-    def layer(x, is_training=True, reuse=None):
-        with tf.variable_scope(name, values=[x], reuse=reuse):
-            return tf.clip_by_value(x,-1,1)
-    return layer
-
-def HardTanhReLU(name='HardTanh'):
-    def layer(x, is_training=True, reuse=None):
-        with tf.variable_scope(name, values=[x], reuse=reuse):
-            return tf.clip_by_value(x,0,1)
-    return layer
-
-def View(shape, name='View', reuse=None):
-    with tf.variable_scope(name, values=[x], reuse=reuse):
-        return wrapNN(tf.reshape,shape=shape)
 
 def SpatialMaxPooling(kW, kH=None, dW=None, dH=None, padding='VALID',
             name='SpatialMaxPooling'):
@@ -373,7 +193,6 @@ def Sequential(moduleList):
     def model(x, is_training=True, reuse=None):
     # Create model
         output = x
-        #with tf.variable_op_scope([x], None, name):
         for i,m in enumerate(moduleList):
             output = m(output, is_training=is_training, reuse=reuse)
             tf.add_to_collection(tf.GraphKeys.ACTIVATIONS, output)
@@ -392,36 +211,6 @@ def Concat(moduleList, dim=3):
         return output
     return model
 
-def Residual(moduleList, connect=True, name='Residual'):
-    m = Sequential(moduleList)
-    def model(x, is_training=True, reuse=None):
-    # Create model
-        with tf.variable_scope(name, values=[x]):
-            if connect:
-                output = tf.add(m(x, is_training=is_training, reuse=reuse), x)
-            else:
-                output = m(x, is_training=is_training, reuse=reuse)
-            return output
-    return model
-
-def ResidualV2(moduleList, connect=True, kW=2, kH=2, dW=2, dH=2, name='Residual'):
-    m = Sequential(moduleList)
-    def model(x, is_training=True, reuse=None):
-    # Create model
-        with tf.variable_scope(name, values=[x]):
-            if connect:
-                output = tf.add(m(x, is_training=is_training, reuse=reuse), x)
-            else:
-                output = m(x, is_training=is_training, reuse=reuse)
-                x = tf.nn.avg_pool(x, ksize=[1, kW, kH, 1], strides=[1, dW, dH, 1], padding='SAME')
-                zero_shape = x.get_shape().as_list()
-                zero_shape[-1] = output.get_shape().as_list()[-1] - zero_shape[-1]
-                zero = tf.zeros(zero_shape)
-                x = tf.concat([x, zero] , axis=-1)
-                output = tf.add(output, x)
-            return output
-    return model
-
 def ResidualV3(moduleList, connect=True, mapfunc=None, name='Residual'):
     m = Sequential(moduleList)
     def model(x, is_training=True, reuse=None):
@@ -434,27 +223,6 @@ def ResidualV3(moduleList, connect=True, mapfunc=None, name='Residual'):
                 x_proj = mapfunc(x, is_training=is_training, reuse=reuse)
                 batch_norm = BatchNormalization(name='rbatch_proj')
                 x_proj = batch_norm(x_proj, is_training=is_training, reuse=reuse)
-                output = tf.add(output, x_proj)
-            else:
-                output = m(x, is_training=is_training, reuse=reuse)
-            return output
-
-    return model
-
-def ResidualV4(moduleList, connect=True, mapfunc=None, name='Residual'):
-    m = Sequential(moduleList)
-    def model(x, is_training=True, reuse=None):
-    # Create model
-        with tf.variable_scope(name, values=[x]):
-            if connect:
-                output = tf.add(m(x, is_training=is_training, reuse=reuse), x)
-            elif mapfunc is not None:
-                output = m(x, is_training=is_training, reuse=reuse)
-                x_proj = mapfunc(x, is_training=is_training, reuse=reuse)
-                batch_norm = BatchNormalization(name='rbatch_proj')
-                x_proj = batch_norm(x_proj, is_training=is_training, reuse=reuse)
-                avg_pooling = SpatialAveragePooling(kW=3, kH=3, dW=2, dH=2, padding='SAME')
-                x_proj = avg_pooling(x_proj)
                 output = tf.add(output, x_proj)
             else:
                 output = m(x, is_training=is_training, reuse=reuse)

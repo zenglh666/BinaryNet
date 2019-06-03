@@ -362,10 +362,7 @@ def __train(model, logger):
             
 
     # When done, ask the threads to stop.
-    coord.request_stop()
-    coord.join(threads)
-    coord.clear_stop()
-    sess.close()
+    __close_sess(sess, coord, threads)
     if FLAGS.summary:
         summary_writer.close()
 
